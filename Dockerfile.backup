@@ -1,0 +1,8 @@
+FROM alpine:3.19
+
+RUN apk add --no-cache dcron zip sqlite
+
+COPY scripts/backup.sh /backup.sh
+RUN chmod +x /backup.sh
+
+CMD ["sh", "-c", "echo \"${BACKUP_CRON:-0 2 * * *} /backup.sh >> /var/log/backup.log 2>&1\" | crontab - && crond -f -l 2"]

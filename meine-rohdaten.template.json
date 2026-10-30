@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Wohnung 1 – Musterstr. 10",
+    "address": "Musterstraße 10, 10115 Berlin",
+    "sqm": 65.0,
+    "floor": "2. OG rechts",
+    "rooms": 2.5,
+    "purchasePrice": 220000.0,
+    "purchasedAt": "2019-04-15",
+    "possessionAt": "2019-07-01",
+    "ancillaryCosts": 23500.0,
+    "tenant": {
+      "firstName": "Vorname",
+      "lastName": "Nachname",
+      "email": "mieter@beispiel.de",
+      "phone": "+49 170 1234567",
+      "iban": "DE89370400440532013000",
+      "coldRent": 750.0,
+      "utilities": 160.0,
+      "deposit": 2250.0,
+      "depositPaid": true,
+      "moveInDate": "2023-01-01",
+      "contractStart": "2023-01-01"
+    },
+    "loans": [
+      {
+        "label": "Hauptdarlehen",
+        "bank": "Musterbank",
+        "originalAmount": 180000.0,
+        "currentBalance": 145000.0,
+        "interestRate": 3.2,
+        "monthlyPayment": 850.0,
+        "startDate": "2019-05-01",
+        "fixedRateEnd": "2029-05-01"
+      }
+    ]
+  }
+]

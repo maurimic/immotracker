@@ -1,0 +1,16 @@
+.env
+.env.local
+node_modules/
+.next/
+*.db
+*.db-journal
+dist/
+.DS_Store
+public/uploads/*
+!public/uploads/.gitkeep
+backups/
+secrets/
+*.private.json
+meine-rohdaten.json
+scratch/
+*.tsbuildinfo

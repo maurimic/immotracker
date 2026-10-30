@@ -1,0 +1,322 @@
+// Prisma Schema für Immotracker
+// SQLite Datenbank
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Modul A: Stammdaten ─────────────────────────────────────────────────────
+
+model Property {
+  id          String   @id @default(cuid())
+  name        String   // z.B. "Wohnung 1 – Musterstr. 1"
+  address     String
+  sqm         Float    // Quadratmeter
+  floor       String?  // Etage
+  rooms       Float?   // Zimmeranzahl
+  
+  // Kaufpreis & Investitionsdaten (optional)
+  purchasePrice  Float?    // Kaufpreis in €
+  purchasedAt    DateTime? // Kaufvertragsdatum (Notartermin)
+  possessionAt   DateTime? // Nutzen- & Lastenwechsel (wirtschaftlicher Eigentumsübergang)
+  ancillaryCosts Float?    // Kaufnebenkosten in € (Grunderwerbsteuer, Notar, Makler)
+  
+  // Laufende Bewirtschaftung & Cashflow (monatlich)
+  nonRecoverableCosts Float?   // Nicht-umlagefähige Betriebskosten / Hausgeld monatlich in € (Verwaltung, Instandhaltung WEG)
+  maintenanceReserve  Float?   // Eigene monatliche Instandhaltungsrücklage in € (optional; falls leer, gilt Standard 1,20 €/m²)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Mietverhältnis
+  tenant      Tenant?
+
+  // Module
+  loans       Loan[]
+  payments    Payment[]
+  tickets     MaintenanceTicket[]
+  meterReadings MeterReading[]
+  rentAdjustments RentAdjustment[]
+  utilityBills   UtilityBill[]
+  utilityAllocations UtilityAllocation[]
+  documents   Document[]
+
+  @@map("properties")
+}
+
+model Tenant {
+  id            String   @id @default(cuid())
+  propertyId    String   @unique
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  iban          String?  // Für automatisches Matching
+  
+  // Mietkonditionen
+  coldRent      Float    // Soll-Kaltmiete
+  utilities     Float    // Nebenkostenvorauszahlung
+  deposit       Float    // Kaution
+  depositPaid   Boolean  @default(false)
+  
+  // Vertragsdaten
+  moveInDate    DateTime?
+  moveOutDate   DateTime?
+  contractStart DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  payments      Payment[]
+
+  @@map("tenants")
+}
+
+model RentAdjustment {
+  id           String   @id @default(cuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  type         String   // "STAFFEL" | "SPIEGEL" | "NEBENKOSTEN" | "INDEX" | "SONSTIGE"
+  effectiveDate DateTime
+  newColdRent  Float?
+  newUtilities Float?   // Neue Nebenkostenvorauszahlung
+  previousColdRent Float? // Vorherige Kaltmiete vor Erhöhung
+  previousUtilities Float? // Vorherige Nebenkosten vor Erhöhung
+  notes        String?
+  reminderDate DateTime?
+  reminded     Boolean  @default(false)
+
+  createdAt    DateTime @default(now())
+
+  @@map("rent_adjustments")
+}
+
+// ─── Modul B: Zahlungen ──────────────────────────────────────────────────────
+
+model Payment {
+  id            String   @id @default(cuid())
+  tenantId      String?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id])
+
+  propertyId    String?
+  property      Property? @relation(fields: [propertyId], references: [id])
+
+  loanId        String?
+  loan          Loan?     @relation(fields: [loanId], references: [id])
+
+  // Rohdaten aus Google Sheets
+  bookingDate   DateTime
+  amount        Float
+  payerName     String
+  payerIban     String?
+  reference     String?  // Verwendungszweck
+  
+  // Matching-Ergebnis
+  matchMethod   String?  // "IBAN" | "NAME" | "AI" | "MANUAL" | "UNMATCHED"
+  matchConfidence Float? // 0-1 für AI-Matching
+  aiRawResponse String? // JSON-Response von Claude
+
+  category      String   @default("RENT") // "RENT" | "UTILITY_IN" | "OTHER"
+  status        String   @default("MATCHED") // "MATCHED" | "UNMATCHED" | "MANUAL_REVIEW"
+  period        String?  // "2024-01" – abrechnungsrelevanter Monat
+  
+  // Import-Metadaten
+  sheetsRowId   String?  @unique // Zur Deduplizierung
+  importedAt    DateTime @default(now())
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("payments")
+}
+
+// ─── Modul B: Nebenkosten ────────────────────────────────────────────────────
+
+model UtilityBill {
+  id           String   @id @default(cuid())
+  propertyId   String?
+  property     Property? @relation(fields: [propertyId], references: [id])
+
+  bookingDate  DateTime
+  amount       Float
+  vendor       String   // Versorger/Versicherung
+  category     String   // "HEATING" | "WATER" | "ELECTRICITY" | "INSURANCE" | "OTHER"
+  isAllocatable Boolean  @default(true) // umlegbar auf Mieter?
+  period       String?  // "2024"
+  description  String?
+
+  allocations  UtilityAllocation[]
+
+  createdAt    DateTime @default(now())
+
+  @@map("utility_bills")
+}
+
+model UtilityAllocation {
+  id            String      @id @default(cuid())
+  billId        String
+  bill          UtilityBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  propertyId    String
+  property      Property    @relation(fields: [propertyId], references: [id])
+
+  allocMethod   String      // "SQM" | "PERSONS"
+  share         Float       // Anteil in %
+  amount        Float       // Betrag für diese Wohnung
+  period        String      // "2024"
+
+  createdAt     DateTime @default(now())
+
+  @@map("utility_allocations")
+}
+
+model UtilityStatement {
+  id           String   @id @default(cuid())
+  propertyId   String
+  period       String   // "2024"
+  
+  totalCosts   Float
+  prepayments  Float    // Geleistete Vorauszahlungen
+  balance      Float    // Nachzahlung (+) oder Guthaben (-)
+  
+  pdfPath      String?
+  generatedAt  DateTime @default(now())
+  
+  lineItems    UtilityStatementItem[]
+
+  @@map("utility_statements")
+}
+
+model UtilityStatementItem {
+  id          String           @id @default(cuid())
+  statementId String
+  statement   UtilityStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+
+  category    String
+  totalCost   Float
+  share       Float
+  amount      Float
+
+  @@map("utility_statement_items")
+}
+
+// ─── Modul C: Kredite & Tilgung ──────────────────────────────────────────────
+
+model Loan {
+  id                String   @id @default(cuid())
+  propertyId        String
+  property          Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  label             String   // z.B. "Hauptdarlehen"
+  bank              String?
+  
+  // Stammdaten
+  originalAmount    Float    // Ursprüngliche Kreditsumme
+  currentBalance    Float    // Aktuelle Restschuld (manuell oder berechnet)
+  interestRate      Float    // Sollzins in % p.a.
+  monthlyPayment    Float    // Monatliche Annuität
+  startDate         DateTime
+  fixedRateEnd      DateTime // Zinsbindungsende
+  
+  // Berechnete Felder (werden via Cron aktualisiert)
+  lastCalculatedAt  DateTime?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  amortizations     Amortization[]
+  payments          Payment[]
+
+  @@map("loans")
+}
+
+model Amortization {
+  id           String   @id @default(cuid())
+  loanId       String
+  loan         Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  period       String   // "2024-01"
+  balanceBefore Float
+  interestPart  Float
+  principalPart Float
+  balanceAfter  Float
+
+  createdAt    DateTime @default(now())
+
+  @@unique([loanId, period])
+  @@map("amortizations")
+}
+
+// ─── Modul D: Instandhaltung ─────────────────────────────────────────────────
+
+model MaintenanceTicket {
+  id           String   @id @default(cuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  title        String
+  description  String?
+  status       String   @default("REPORTED") // "REPORTED" | "IN_PROGRESS" | "DONE"
+  priority     String   @default("MEDIUM")   // "LOW" | "MEDIUM" | "HIGH"
+  cost         Float?
+  craftsman    String?
+  reportedAt   DateTime @default(now())
+  doneAt       DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("maintenance_tickets")
+}
+
+model MeterReading {
+  id           String   @id @default(cuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  type         String   // "ELECTRICITY" | "WATER" | "HEATING" | "GAS"
+  value        Float
+  unit         String   @default("kWh") // kWh, m³
+  readingDate  DateTime
+  photoPath    String?
+  notes        String?
+
+  createdAt    DateTime @default(now())
+
+  @@map("meter_readings")
+}
+
+// ─── Dokumente ───────────────────────────────────────────────────────────────
+
+model Document {
+  id           String   @id @default(cuid())
+  propertyId   String?
+  property     Property? @relation(fields: [propertyId], references: [id])
+
+  name         String
+  type         String   // "CONTRACT" | "INVOICE" | "INSURANCE" | "OTHER"
+  filePath     String
+  mimeType     String?
+  fileSize     Int?
+
+  uploadedAt   DateTime @default(now())
+
+  @@map("documents")
+}
+
+// ─── System ──────────────────────────────────────────────────────────────────
+
+model AppSetting {
+  key          String   @id
+  value        String
+  updatedAt    DateTime @updatedAt
+
+  @@map("app_settings")
+}
