@@ -446,13 +446,13 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
 
   return (
     <div className="inline-flex items-center gap-1 p-0.5 rounded-lg border border-border/60 bg-muted/20 shrink-0">
-      {/* Button Maurizio - Feste Breite w-36 verhindert jegliches Verschieben benachbarter Buttons */}
+      {/* Button Maurizio - Feste Breite w-[168px] stellt vollen Namen ohne Abschneiden dar */}
       <Button
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("maurizio")}
         disabled={loadingAccount === "steven" || (activeAccount === "steven" && autoSyncCountdown !== null)}
-        className={`h-8 w-36 px-2 gap-1.5 text-xs font-medium transition-colors ${
+        className={`h-8 w-[168px] px-2.5 gap-1.5 text-xs font-medium transition-colors ${
           activeAccount === "maurizio" && autoSyncCountdown !== null
             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
             : "hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 text-foreground"
@@ -466,25 +466,25 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
         {activeAccount === "maurizio" && autoSyncCountdown !== null ? (
           <>
             <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500 shrink-0" />
-            <span className="truncate font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
+            <span className="whitespace-nowrap font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
           </>
         ) : (
           <>
             <Smartphone className={`h-3.5 w-3.5 shrink-0 ${loadingAccount === "maurizio" ? "animate-spin text-amber-500" : "text-amber-600 dark:text-amber-400"}`} />
-            <span className="truncate">{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
+            <span className="whitespace-nowrap">{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
           </>
         )}
       </Button>
 
       <span className="h-4 w-[1px] bg-border/80" />
 
-      {/* Button Steven - Feste Breite w-36 verhindert jegliches Verschieben benachbarter Buttons */}
+      {/* Button Steven - Feste Breite w-[168px] stellt vollen Namen ohne Abschneiden dar */}
       <Button
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("steven")}
         disabled={loadingAccount === "maurizio" || (activeAccount === "maurizio" && autoSyncCountdown !== null)}
-        className={`h-8 w-36 px-2 gap-1.5 text-xs font-medium transition-colors ${
+        className={`h-8 w-[168px] px-2.5 gap-1.5 text-xs font-medium transition-colors ${
           activeAccount === "steven" && autoSyncCountdown !== null
             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
             : "hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 text-foreground"
@@ -498,12 +498,12 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
         {activeAccount === "steven" && autoSyncCountdown !== null ? (
           <>
             <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500 shrink-0" />
-            <span className="truncate font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
+            <span className="whitespace-nowrap font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
           </>
         ) : (
           <>
             <Smartphone className={`h-3.5 w-3.5 shrink-0 ${loadingAccount === "steven" ? "animate-spin text-indigo-500" : "text-indigo-600 dark:text-indigo-400"}`} />
-            <span className="truncate">{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
+            <span className="whitespace-nowrap">{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
           </>
         )}
       </Button>
