@@ -1584,7 +1584,7 @@ Mieter: ${item.tenant}
                   15%-Grenze (§ 6 Abs. 1 Nr. 1a EStG)
                 </CardTitle>
                 <CardDescription>
-                  Schutz vor der steuerlichen "Aktivierungsfalle"
+                  Schutz vor der steuerlichen &quot;Aktivierungsfalle&quot;
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground space-y-2.5">
