@@ -2148,25 +2148,6 @@ function ZahlungenContent() {
           {/* Zuordnungen neu abgleichen (Re-Match) */}
           <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); }} />
 
-          {/* Mietanpassung erfassen & Historie */}
-          <RentAdjustmentDialog
-            onRefresh={() => {
-              fetchPayments();
-              fetchTenants();
-            }}
-            trigger={
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 shadow-sm border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10 hover:border-blue-500"
-                title="Mietanpassungen & Erhöhungen (Kaltmiete / Nebenkosten) dokumentieren"
-              >
-                <TrendingUp className="h-3.5 w-3.5 text-blue-500" />
-                Mietanpassung
-              </Button>
-            }
-          />
-
           {/* Google Sheets Sync & Status */}
           <GoogleSheetsDialog onSyncComplete={fetchPayments} />
 
