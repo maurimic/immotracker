@@ -19,6 +19,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=file:/tmp/build.db
 
 RUN npx prisma generate
+RUN npx prisma db push --skip-generate
 RUN npm run build
 
 # Production runner
