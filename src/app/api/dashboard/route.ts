@@ -4,6 +4,9 @@ import { currentPeriod } from "@/lib/utils";
 import { getRentForPeriod } from "@/lib/rent-history";
 import { fetchLatestAccountBalance } from "@/lib/google-sheets";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * Dashboard-Aggregation-API
  * Liefert alle KPIs für das Haupt-Dashboard
