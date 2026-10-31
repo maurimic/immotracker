@@ -350,23 +350,24 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
   const [loadingAccount, setLoadingAccount] = useState<"maurizio" | "steven" | null>(null);
   const [autoSyncCountdown, setAutoSyncCountdown] = useState<number | null>(null);
   const [isSyncingSheet, setIsSyncingSheet] = useState(false);
-  const [activeAccountName, setActiveAccountName] = useState<string | null>(null);
+  const [activeAccount, setActiveAccount] = useState<"maurizio" | "steven" | null>(null);
 
-  const executeGoogleSheetsSync = async (accountName: string | null) => {
+  const executeGoogleSheetsSync = async (account: "maurizio" | "steven" | null) => {
     setIsSyncingSheet(true);
+    const accountName = account === "maurizio" ? "Maurizio" : account === "steven" ? "Steven" : "Comdirect";
     try {
       const res = await fetch("/api/payments/sync", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         if (data.imported > 0) {
           toast({
-            title: `Bankbuchungen aktualisiert (${accountName || "Comdirect"})`,
+            title: `Bankbuchungen aktualisiert (${accountName})`,
             description: `${data.imported} neue Buchung(en) aus Google Sheets eingelesen (${data.matched} automatisch zugeordnet).`,
           });
         } else {
           toast({
-            title: `Google Sheet geprüft (${accountName || "Comdirect"})`,
-            description: "Es lagen noch keine neuen Buchungen vor. Falls die Push-TAN erst verzögert freigegeben wurde, einfach auf 'Google Sheets Sync' klicken.",
+            title: `Google Sheet geprüft (${accountName})`,
+            description: "Es lagen noch keine neuen Zeilen vor. Falls die TAN verzögert freigegeben wurde, einfach auf 'Google Sheets Sync' klicken.",
           });
         }
         if (onSyncComplete) onSyncComplete();
@@ -386,7 +387,7 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
     } finally {
       setIsSyncingSheet(false);
       setAutoSyncCountdown(null);
-      setActiveAccountName(null);
+      setActiveAccount(null);
     }
   };
 
@@ -398,11 +399,17 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
       }, 1000);
       return () => clearTimeout(timer);
     }
-    // Countdown abgelaufen (0): Vollautomatischer Import aus Google Sheets!
-    executeGoogleSheetsSync(activeAccountName);
-  }, [autoSyncCountdown, activeAccountName]);
+    // Countdown abgelaufen (0): Vollautomatischer Import aus Google Sheets nach 10s!
+    executeGoogleSheetsSync(activeAccount);
+  }, [autoSyncCountdown, activeAccount]);
 
   const triggerSync = async (account: "maurizio" | "steven") => {
+    // Wenn dieser Account gerade im Countdown läuft, Sofort-Sync auslösen:
+    if (activeAccount === account && autoSyncCountdown !== null) {
+      executeGoogleSheetsSync(account);
+      return;
+    }
+
     setLoadingAccount(account);
     const name = account === "maurizio" ? "Maurizio" : "Steven";
     try {
@@ -415,10 +422,10 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
       if (data.success) {
         toast({
           title: `Comdirect-Abruf gestartet (${name})`,
-          description: "Bitte jetzt Push-TAN in der Banking-App freigeben! Immotracker liest das Google Sheet in 25s automatisch ein.",
+          description: "Bitte Push-TAN auf dem Smartphone freigeben! Google Sheet wird in 10s automatisch eingelesen.",
         });
-        setActiveAccountName(name);
-        setAutoSyncCountdown(25);
+        setActiveAccount(account);
+        setAutoSyncCountdown(10);
       } else {
         toast({
           title: `Fehler beim Starten (${name})`,
@@ -438,50 +445,68 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
   };
 
   return (
-    <div className="inline-flex items-center gap-1.5 p-0.5 rounded-lg border border-border/60 bg-muted/20">
+    <div className="inline-flex items-center gap-1 p-0.5 rounded-lg border border-border/60 bg-muted/20 shrink-0">
+      {/* Button Maurizio - Feste Breite w-36 verhindert jegliches Verschieben benachbarter Buttons */}
       <Button
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("maurizio")}
-        disabled={loadingAccount !== null || autoSyncCountdown !== null}
-        className="h-8 gap-1.5 text-xs font-medium hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 text-foreground"
-        title="Startet n8n-Workflow für Maurizio (Push-TAN in der Comdirect-App freigeben)"
+        disabled={loadingAccount === "steven" || (activeAccount === "steven" && autoSyncCountdown !== null)}
+        className={`h-8 w-36 px-2 gap-1.5 text-xs font-medium transition-colors ${
+          activeAccount === "maurizio" && autoSyncCountdown !== null
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
+            : "hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 text-foreground"
+        }`}
+        title={
+          activeAccount === "maurizio" && autoSyncCountdown !== null
+            ? "TAN bereits freigegeben? Klicken für Sofort-Sync!"
+            : "Startet n8n-Workflow für Maurizio (Push-TAN in der Comdirect-App freigeben)"
+        }
       >
-        <Smartphone className={`h-3.5 w-3.5 ${loadingAccount === "maurizio" ? "animate-spin text-amber-500" : "text-amber-600 dark:text-amber-400"}`} />
-        <span>{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
+        {activeAccount === "maurizio" && autoSyncCountdown !== null ? (
+          <>
+            <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500 shrink-0" />
+            <span className="truncate font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
+          </>
+        ) : (
+          <>
+            <Smartphone className={`h-3.5 w-3.5 shrink-0 ${loadingAccount === "maurizio" ? "animate-spin text-amber-500" : "text-amber-600 dark:text-amber-400"}`} />
+            <span className="truncate">{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
+          </>
+        )}
       </Button>
 
       <span className="h-4 w-[1px] bg-border/80" />
 
+      {/* Button Steven - Feste Breite w-36 verhindert jegliches Verschieben benachbarter Buttons */}
       <Button
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("steven")}
-        disabled={loadingAccount !== null || autoSyncCountdown !== null}
-        className="h-8 gap-1.5 text-xs font-medium hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 text-foreground"
-        title="Startet n8n-Workflow für Steven (Push-TAN in der Comdirect-App freigeben)"
+        disabled={loadingAccount === "maurizio" || (activeAccount === "maurizio" && autoSyncCountdown !== null)}
+        className={`h-8 w-36 px-2 gap-1.5 text-xs font-medium transition-colors ${
+          activeAccount === "steven" && autoSyncCountdown !== null
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
+            : "hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 text-foreground"
+        }`}
+        title={
+          activeAccount === "steven" && autoSyncCountdown !== null
+            ? "TAN bereits freigegeben? Klicken für Sofort-Sync!"
+            : "Startet n8n-Workflow für Steven (Push-TAN in der Comdirect-App freigeben)"
+        }
       >
-        <Smartphone className={`h-3.5 w-3.5 ${loadingAccount === "steven" ? "animate-spin text-indigo-500" : "text-indigo-600 dark:text-indigo-400"}`} />
-        <span>{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
+        {activeAccount === "steven" && autoSyncCountdown !== null ? (
+          <>
+            <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500 shrink-0" />
+            <span className="truncate font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
+          </>
+        ) : (
+          <>
+            <Smartphone className={`h-3.5 w-3.5 shrink-0 ${loadingAccount === "steven" ? "animate-spin text-indigo-500" : "text-indigo-600 dark:text-indigo-400"}`} />
+            <span className="truncate">{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
+          </>
+        )}
       </Button>
-
-      {/* Live Auto-Sync Countdown & Sofort-Sync Shortcut */}
-      {autoSyncCountdown !== null && (
-        <>
-          <span className="h-4 w-[1px] bg-border/80" />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => executeGoogleSheetsSync(activeAccountName)}
-            disabled={isSyncingSheet}
-            className="h-8 gap-1.5 text-xs font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
-            title="TAN schon freigegeben? Klicken, um Google Sheet sofort jetzt einzulesen!"
-          >
-            <RefreshCw className={`h-3 w-3 ${isSyncingSheet ? "animate-spin text-emerald-500" : "animate-spin text-emerald-600"}`} />
-            <span>{isSyncingSheet ? "Lese Google Sheet..." : `Auto-Sync in ${autoSyncCountdown}s (Jetzt sync)`}</span>
-          </Button>
-        </>
-      )}
     </div>
   );
 }
