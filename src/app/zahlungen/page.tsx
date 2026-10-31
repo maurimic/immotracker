@@ -345,9 +345,62 @@ function RematchButton({ onRematchComplete }: { onRematchComplete: () => void })
   );
 }
 
-// ─── n8n Comdirect Bank-Sync Buttons (Maurizio & Steven) ────────────────────
-function N8nBankSyncButtons() {
+// ─── n8n Comdirect Bank-Sync Buttons (Maurizio & Steven) mit Auto-Sync ──────
+function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void }) {
   const [loadingAccount, setLoadingAccount] = useState<"maurizio" | "steven" | null>(null);
+  const [autoSyncCountdown, setAutoSyncCountdown] = useState<number | null>(null);
+  const [isSyncingSheet, setIsSyncingSheet] = useState(false);
+  const [activeAccountName, setActiveAccountName] = useState<string | null>(null);
+
+  const executeGoogleSheetsSync = async (accountName: string | null) => {
+    setIsSyncingSheet(true);
+    try {
+      const res = await fetch("/api/payments/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.imported > 0) {
+          toast({
+            title: `Bankbuchungen aktualisiert (${accountName || "Comdirect"})`,
+            description: `${data.imported} neue Buchung(en) aus Google Sheets eingelesen (${data.matched} automatisch zugeordnet).`,
+          });
+        } else {
+          toast({
+            title: `Google Sheet geprüft (${accountName || "Comdirect"})`,
+            description: "Es lagen noch keine neuen Buchungen vor. Falls die Push-TAN erst verzögert freigegeben wurde, einfach auf 'Google Sheets Sync' klicken.",
+          });
+        }
+        if (onSyncComplete) onSyncComplete();
+      } else {
+        toast({
+          title: "Hinweis zum Sheet-Abgleich",
+          description: data.error || "Google Sheet konnte nicht automatisch gelesen werden.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Verbindungsfehler",
+        description: "Google Sheet Sync konnte nicht abgeschlossen werden.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingSheet(false);
+      setAutoSyncCountdown(null);
+      setActiveAccountName(null);
+    }
+  };
+
+  useEffect(() => {
+    if (autoSyncCountdown === null) return;
+    if (autoSyncCountdown > 0) {
+      const timer = setTimeout(() => {
+        setAutoSyncCountdown((prev) => (prev !== null ? prev - 1 : null));
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    // Countdown abgelaufen (0): Vollautomatischer Import aus Google Sheets!
+    executeGoogleSheetsSync(activeAccountName);
+  }, [autoSyncCountdown, activeAccountName]);
 
   const triggerSync = async (account: "maurizio" | "steven") => {
     setLoadingAccount(account);
@@ -362,12 +415,14 @@ function N8nBankSyncButtons() {
       if (data.success) {
         toast({
           title: `Comdirect-Abruf gestartet (${name})`,
-          description: "Bitte jetzt die Push-TAN auf dem Smartphone freigeben! Das Google Sheet wird danach befüllt.",
+          description: "Bitte jetzt Push-TAN in der Banking-App freigeben! Immotracker liest das Google Sheet in 25s automatisch ein.",
         });
+        setActiveAccountName(name);
+        setAutoSyncCountdown(25);
       } else {
         toast({
-          title: `Fehler beim Aufruf (${name})`,
-          description: data.error || "Konnte den n8n-Workflow nicht starten.",
+          title: `Fehler beim Starten (${name})`,
+          description: data.error || "Konnte den n8n-Workflow nicht anstoßen.",
           variant: "destructive",
         });
       }
@@ -388,9 +443,9 @@ function N8nBankSyncButtons() {
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("maurizio")}
-        disabled={loadingAccount !== null}
+        disabled={loadingAccount !== null || autoSyncCountdown !== null}
         className="h-8 gap-1.5 text-xs font-medium hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 text-foreground"
-        title="Startet den n8n-Workflow für Maurizio (Comdirect Push-TAN auf dem Smartphone bestätigen)"
+        title="Startet n8n-Workflow für Maurizio (Push-TAN in der Comdirect-App freigeben)"
       >
         <Smartphone className={`h-3.5 w-3.5 ${loadingAccount === "maurizio" ? "animate-spin text-amber-500" : "text-amber-600 dark:text-amber-400"}`} />
         <span>{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
@@ -402,13 +457,31 @@ function N8nBankSyncButtons() {
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("steven")}
-        disabled={loadingAccount !== null}
+        disabled={loadingAccount !== null || autoSyncCountdown !== null}
         className="h-8 gap-1.5 text-xs font-medium hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 text-foreground"
-        title="Startet den n8n-Workflow für Steven (Comdirect Push-TAN auf dem Smartphone bestätigen)"
+        title="Startet n8n-Workflow für Steven (Push-TAN in der Comdirect-App freigeben)"
       >
         <Smartphone className={`h-3.5 w-3.5 ${loadingAccount === "steven" ? "animate-spin text-indigo-500" : "text-indigo-600 dark:text-indigo-400"}`} />
         <span>{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
       </Button>
+
+      {/* Live Auto-Sync Countdown & Sofort-Sync Shortcut */}
+      {autoSyncCountdown !== null && (
+        <>
+          <span className="h-4 w-[1px] bg-border/80" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => executeGoogleSheetsSync(activeAccountName)}
+            disabled={isSyncingSheet}
+            className="h-8 gap-1.5 text-xs font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
+            title="TAN schon freigegeben? Klicken, um Google Sheet sofort jetzt einzulesen!"
+          >
+            <RefreshCw className={`h-3 w-3 ${isSyncingSheet ? "animate-spin text-emerald-500" : "animate-spin text-emerald-600"}`} />
+            <span>{isSyncingSheet ? "Lese Google Sheet..." : `Auto-Sync in ${autoSyncCountdown}s (Jetzt sync)`}</span>
+          </Button>
+        </>
+      )}
     </div>
   );
 }
@@ -2044,8 +2117,8 @@ function ZahlungenContent() {
             </SelectContent>
           </Select>
 
-          {/* n8n Comdirect Bankabruf (Maurizio & Steven) */}
-          <N8nBankSyncButtons />
+          {/* n8n Comdirect Bankabruf (Maurizio & Steven) mit Auto-Sync */}
+          <N8nBankSyncButtons onSyncComplete={() => { fetchPayments(); fetchTenants(); }} />
 
           {/* Zuordnungen neu abgleichen (Re-Match) */}
           <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); }} />
