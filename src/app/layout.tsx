@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/toaster";
 import { Sidebar } from "@/components/layout/sidebar";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = { className: "font-sans antialiased" };
 
 export const metadata: Metadata = {
   title: {
