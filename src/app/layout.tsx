@@ -13,6 +13,12 @@ export const metadata: Metadata = {
   },
   description: "Professionelles Mietverwaltungs-Tool mit KI-gestütztem Buchungsabgleich, Tilgungsrechner und Zinsbindungs-Ampel",
   keywords: ["Immobilien", "Mietverwaltung", "Nebenkostenabrechnung", "Tilgungsplan", "Zinsbindung"],
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
