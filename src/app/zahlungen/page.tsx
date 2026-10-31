@@ -7,7 +7,7 @@ import {
   Bot, User, Hash, Euro, Calendar, Filter, Upload, FileText,
   Copy, Printer, Send, FileSpreadsheet, Eye, EyeOff, Building2,
   ExternalLink, Info, CheckCircle2, ArrowDownLeft, ArrowUpRight, Search,
-  Scale, TrendingUp, Landmark, X
+  Scale, TrendingUp, Landmark, X, Smartphone
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -342,6 +342,74 @@ function RematchButton({ onRematchComplete }: { onRematchComplete: () => void })
       <RefreshCw className={`h-3.5 w-3.5 ${rematching ? "animate-spin text-primary" : "text-muted-foreground"}`} />
       <span>{rematching ? "Gleiche ab..." : "Zuordnungen neu abgleichen"}</span>
     </Button>
+  );
+}
+
+// ─── n8n Comdirect Bank-Sync Buttons (Maurizio & Steven) ────────────────────
+function N8nBankSyncButtons() {
+  const [loadingAccount, setLoadingAccount] = useState<"maurizio" | "steven" | null>(null);
+
+  const triggerSync = async (account: "maurizio" | "steven") => {
+    setLoadingAccount(account);
+    const name = account === "maurizio" ? "Maurizio" : "Steven";
+    try {
+      const res = await fetch("/api/bank-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast({
+          title: `Comdirect-Abruf gestartet (${name})`,
+          description: "Bitte jetzt die Push-TAN auf dem Smartphone freigeben! Das Google Sheet wird danach befüllt.",
+        });
+      } else {
+        toast({
+          title: `Fehler beim Aufruf (${name})`,
+          description: data.error || "Konnte den n8n-Workflow nicht starten.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Verbindungsfehler",
+        description: `Konnte den Workflow für ${name} nicht anstoßen.`,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAccount(null);
+    }
+  };
+
+  return (
+    <div className="inline-flex items-center gap-1.5 p-0.5 rounded-lg border border-border/60 bg-muted/20">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => triggerSync("maurizio")}
+        disabled={loadingAccount !== null}
+        className="h-8 gap-1.5 text-xs font-medium hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 text-foreground"
+        title="Startet den n8n-Workflow für Maurizio (Comdirect Push-TAN auf dem Smartphone bestätigen)"
+      >
+        <Smartphone className={`h-3.5 w-3.5 ${loadingAccount === "maurizio" ? "animate-spin text-amber-500" : "text-amber-600 dark:text-amber-400"}`} />
+        <span>{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
+      </Button>
+
+      <span className="h-4 w-[1px] bg-border/80" />
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => triggerSync("steven")}
+        disabled={loadingAccount !== null}
+        className="h-8 gap-1.5 text-xs font-medium hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 text-foreground"
+        title="Startet den n8n-Workflow für Steven (Comdirect Push-TAN auf dem Smartphone bestätigen)"
+      >
+        <Smartphone className={`h-3.5 w-3.5 ${loadingAccount === "steven" ? "animate-spin text-indigo-500" : "text-indigo-600 dark:text-indigo-400"}`} />
+        <span>{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
+      </Button>
+    </div>
   );
 }
 
@@ -1975,6 +2043,9 @@ function ZahlungenContent() {
               })}
             </SelectContent>
           </Select>
+
+          {/* n8n Comdirect Bankabruf (Maurizio & Steven) */}
+          <N8nBankSyncButtons />
 
           {/* Zuordnungen neu abgleichen (Re-Match) */}
           <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); }} />
