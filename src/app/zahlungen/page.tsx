@@ -352,7 +352,7 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
   const [isSyncingSheet, setIsSyncingSheet] = useState(false);
   const [activeAccount, setActiveAccount] = useState<"maurizio" | "steven" | null>(null);
 
-  const executeGoogleSheetsSync = async (account: "maurizio" | "steven" | null) => {
+  const executeGoogleSheetsSync = async (account: "maurizio" | "steven" | null, retryCount = 0) => {
     setIsSyncingSheet(true);
     const accountName = account === "maurizio" ? "Maurizio" : account === "steven" ? "Steven" : "Comdirect";
     try {
@@ -364,19 +364,39 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
             title: `Bankbuchungen aktualisiert (${accountName})`,
             description: `${data.imported} neue Buchung(en) aus Google Sheets eingelesen (${data.matched} automatisch zugeordnet).`,
           });
+          if (onSyncComplete) onSyncComplete();
+          setIsSyncingSheet(false);
+          setAutoSyncCountdown(null);
+          setActiveAccount(null);
+        } else if (retryCount < 2) {
+          // n8n braucht nach Push-TAN oft 15-30s zum Schreiben ins Sheet.
+          // Falls nach 10s noch keine neue Zeile da ist: automatisch nach 12s nochmals prüfen!
+          toast({
+            title: `Warte auf Google Sheet (${accountName})...`,
+            description: "Noch keine neue Zeile im Sheet. Prüfe automatisch in wenigen Sekunden erneut...",
+          });
+          setTimeout(() => {
+            executeGoogleSheetsSync(account, retryCount + 1);
+          }, 12000);
+          return;
         } else {
           toast({
             title: `Google Sheet geprüft (${accountName})`,
-            description: "Es lagen noch keine neuen Zeilen vor. Falls die TAN verzögert freigegeben wurde, einfach auf 'Google Sheets Sync' klicken.",
+            description: "Keine neuen Zeilen gefunden. Falls die TAN erst später freigegeben wurde, einfach auf 'Google Sheets Sync' klicken.",
           });
+          setIsSyncingSheet(false);
+          setAutoSyncCountdown(null);
+          setActiveAccount(null);
         }
-        if (onSyncComplete) onSyncComplete();
       } else {
         toast({
           title: "Hinweis zum Sheet-Abgleich",
           description: data.error || "Google Sheet konnte nicht automatisch gelesen werden.",
           variant: "destructive",
         });
+        setIsSyncingSheet(false);
+        setAutoSyncCountdown(null);
+        setActiveAccount(null);
       }
     } catch {
       toast({
@@ -384,7 +404,6 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
         description: "Google Sheet Sync konnte nicht abgeschlossen werden.",
         variant: "destructive",
       });
-    } finally {
       setIsSyncingSheet(false);
       setAutoSyncCountdown(null);
       setActiveAccount(null);

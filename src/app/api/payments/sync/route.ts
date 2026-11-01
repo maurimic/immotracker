@@ -7,6 +7,9 @@ import {
 } from "@/lib/google-sheets";
 import { matchTransaction, detectPaymentPeriod } from "@/lib/matching";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * GET /api/payments/sync
  * Prüft den Google Sheets Verbindungsstatus
