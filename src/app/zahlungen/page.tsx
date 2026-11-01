@@ -1672,7 +1672,7 @@ function TenantMonthlyHistoryDialog({
 function ZahlungenContent() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get("search") || "";
-  const initialPeriod = searchParams.get("period") || "2026-10";
+  const initialPeriod = searchParams.get("period") || currentPeriod();
   const initialTab = searchParams.get("tab") || "status";
 
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
