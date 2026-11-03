@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const properties = await prisma.property.findMany({
     include: {
@@ -14,6 +16,9 @@ export async function GET() {
         orderBy: { effectiveDate: "asc" },
       },
       documents: true,
+      investments: {
+        orderBy: { date: "desc" },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -64,6 +69,7 @@ export async function POST(request: Request) {
         purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : null,
         possessionAt: body.possessionAt ? new Date(body.possessionAt) : null,
         ancillaryCosts: body.ancillaryCosts !== undefined && body.ancillaryCosts !== "" && !isNaN(parseFloat(body.ancillaryCosts)) ? parseFloat(body.ancillaryCosts) : null,
+        buildingSharePercent: body.buildingSharePercent !== undefined && body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80,
         nonRecoverableCosts: body.nonRecoverableCosts !== undefined && body.nonRecoverableCosts !== "" && !isNaN(parseFloat(body.nonRecoverableCosts)) ? parseFloat(body.nonRecoverableCosts) : null,
         maintenanceReserve: body.maintenanceReserve !== undefined && body.maintenanceReserve !== "" && !isNaN(parseFloat(body.maintenanceReserve)) ? parseFloat(body.maintenanceReserve) : null,
         ...(tenantInput ? { tenant: { create: tenantInput } } : {}),
@@ -74,6 +80,7 @@ export async function POST(request: Request) {
         tickets: true,
         rentAdjustments: true,
         documents: true,
+        investments: true,
       },
     });
 

@@ -26,6 +26,8 @@ import {
   Sparkles,
   ArrowRight,
   Calculator,
+  Hammer,
+  AlertCircle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { PropertyInvestmentsDialog } from "@/components/PropertyInvestmentsDialog";
 
 interface Property {
   id: string;
@@ -49,6 +52,19 @@ interface Property {
   purchasedAt?: string | null;
   possessionAt?: string | null;
   ancillaryCosts?: number | null;
+  buildingSharePercent?: number | null;
+  investments?: Array<{
+    id: string;
+    title: string;
+    description?: string | null;
+    amount: number;
+    amountNet?: number | null;
+    date: string;
+    craftsman?: string | null;
+    category: string;
+    isCapitalized: boolean;
+    relevantFor15Percent: boolean;
+  }>;
   tenant?: {
     firstName: string;
     lastName: string;
@@ -146,27 +162,28 @@ export default function SteuernPage() {
   }, [coOwners]);
 
   // Daten laden
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [propsRes, loansRes, ticketsRes, billsRes] = await Promise.all([
-          fetch("/api/properties"),
-          fetch("/api/loans"),
-          fetch("/api/tickets"),
-          fetch("/api/utility-bills"),
-        ]);
+  const loadData = async () => {
+    try {
+      const [propsRes, loansRes, ticketsRes, billsRes] = await Promise.all([
+        fetch("/api/properties"),
+        fetch("/api/loans"),
+        fetch("/api/tickets"),
+        fetch("/api/utility-bills"),
+      ]);
 
-        if (propsRes.ok) setProperties(await propsRes.json());
-        if (loansRes.ok) setLoans(await loansRes.json());
-        if (ticketsRes.ok) setTickets(await ticketsRes.json());
-        if (billsRes.ok) setUtilityBills(await billsRes.json());
-      } catch (e) {
-        console.error("Fehler beim Laden der Steuerdaten", e);
-        toast({ title: "Fehler beim Laden der Daten", variant: "destructive" });
-      } finally {
-        setLoading(false);
-      }
+      if (propsRes.ok) setProperties(await propsRes.json());
+      if (loansRes.ok) setLoans(await loansRes.json());
+      if (ticketsRes.ok) setTickets(await ticketsRes.json());
+      if (billsRes.ok) setUtilityBills(await billsRes.json());
+    } catch (e) {
+      console.error("Fehler beim Laden der Steuerdaten", e);
+      toast({ title: "Fehler beim Laden der Daten", variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -192,7 +209,8 @@ export default function SteuernPage() {
     let totalBuildingAfa = 0;
     const propertyAfaList = properties.map((p) => {
       const basePrice = (p.purchasePrice || 0) + (p.ancillaryCosts || 0);
-      const buildingShare = basePrice * (buildingSharePercent / 100);
+      const share = p.buildingSharePercent ?? buildingSharePercent;
+      const buildingShare = basePrice * (share / 100);
       let yearAfa = buildingShare * (afaRatePercent / 100);
 
       // Zeitanteilige AfA im Anschaffungsjahr prüfen (§ 7 Abs. 1 Satz 4 EStG)
@@ -319,6 +337,69 @@ export default function SteuernPage() {
       };
     });
 
+    // 2.7 15%-Grenzen Monitoring (§ 6 Abs. 1 Nr. 1a EStG)
+    const now = new Date();
+    const fifteenPercentList = properties.map((p) => {
+      const price = p.purchasePrice || 0;
+      const share = p.buildingSharePercent ?? buildingSharePercent;
+      const buildingVal = price * (share / 100);
+      const limit15 = buildingVal * 0.15;
+      const acqDate = p.possessionAt || p.purchasedAt;
+
+      let deadlineEnd: Date | null = null;
+      let isExpired = false;
+      let daysRemaining = 0;
+      let monthsRemaining = 0;
+
+      if (acqDate) {
+        deadlineEnd = new Date(acqDate);
+        deadlineEnd.setFullYear(deadlineEnd.getFullYear() + 3);
+        isExpired = now > deadlineEnd;
+        daysRemaining = Math.max(0, Math.ceil((deadlineEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+        monthsRemaining = Math.max(0, Math.ceil(daysRemaining / 30.4));
+      }
+
+      const relevantInvs = (p.investments || []).filter((inv) => {
+        if (!inv.relevantFor15Percent) return false;
+        if (!acqDate || !deadlineEnd) return true;
+        const d = new Date(inv.date);
+        return d >= new Date(acqDate) && d <= deadlineEnd;
+      });
+
+      const totalSpentNet = relevantInvs.reduce((sum, inv) => {
+        const net = inv.amountNet != null ? inv.amountNet : Math.round((inv.amount / 1.19) * 100) / 100;
+        return sum + net;
+      }, 0);
+
+      const totalSpentGross = relevantInvs.reduce((sum, inv) => sum + inv.amount, 0);
+      const remainingBuffer = limit15 - totalSpentNet;
+      const usedPct = limit15 > 0 ? (totalSpentNet / limit15) * 100 : 0;
+
+      let status: "OK" | "WARNING" | "EXCEEDED" | "EXPIRED" = "OK";
+      if (isExpired) status = "EXPIRED";
+      else if (totalSpentNet > limit15 && limit15 > 0) status = "EXCEEDED";
+      else if (usedPct >= 80 && limit15 > 0) status = "WARNING";
+
+      return {
+        property: p,
+        price,
+        share,
+        buildingVal,
+        limit15,
+        acqDate,
+        deadlineEnd,
+        isExpired,
+        daysRemaining,
+        monthsRemaining,
+        totalSpentNet,
+        totalSpentGross,
+        remainingBuffer,
+        usedPct,
+        status,
+        investmentsCount: relevantInvs.length,
+      };
+    });
+
     return {
       annualColdRent,
       annualUtilitiesAdvances,
@@ -341,6 +422,7 @@ export default function SteuernPage() {
       totalExpenses,
       netTaxableIncome,
       perPropertyBreakdown,
+      fifteenPercentList,
     };
   }, [properties, loans, tickets, utilityBills, taxYear, buildingSharePercent, afaRatePercent, drivenKm, accountFees, softwareAndOffice, customExpenses]);
 
@@ -769,7 +851,7 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
 
       {/* ─── Main Tabs ──────────────────────────────────────────────────────── */}
       <Tabs defaultValue="anlage-v" className="w-full space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto p-1 bg-secondary/50">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 h-auto p-1 bg-secondary/50">
           <TabsTrigger value="anlage-v" className="gap-1.5 py-2">
             <FileSpreadsheet className="h-4 w-4" /> Anlage V (ESt)
           </TabsTrigger>
@@ -781,6 +863,9 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
           </TabsTrigger>
           <TabsTrigger value="afa" className="gap-1.5 py-2">
             <Calculator className="h-4 w-4" /> AfA & Abschreibung
+          </TabsTrigger>
+          <TabsTrigger value="15prozent" className="gap-1.5 py-2">
+            <ShieldAlert className="h-4 w-4 text-amber-500" /> 15%-Grenzen Monitor
           </TabsTrigger>
           <TabsTrigger value="tipps" className="gap-1.5 py-2">
             <Sparkles className="h-4 w-4" /> Tipps & Fristen
@@ -1568,6 +1653,294 @@ Mieter: ${item.tenant}
                     </TableRow>
                   </TableBody>
                 </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── TAB: 15%-GRENZEN MONITOR (§ 6 Abs. 1 Nr. 1a EStG) ───────────── */}
+        <TabsContent value="15prozent" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShieldAlert className="h-5 w-5 text-amber-500" />
+                    15%-Grenzen Monitor (§ 6 Abs. 1 Nr. 1a EStG – Anschaffungsnahe Herstellungskosten)
+                  </CardTitle>
+                  <CardDescription>
+                    Automatische Überwachung der 3-Jahres-Frist ab Erwerb zur Vermeidung der steuerlichen Aktivierungsfalle
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs bg-secondary/50">
+                    Maßstab: Reiner Netto-Gebäudewert
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Top KPI Kacheln */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-secondary/40 rounded-xl p-3 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold block">
+                    In Frist (&lt; 3 Jahre)
+                  </span>
+                  <span className="text-2xl font-bold font-mono text-foreground mt-0.5 block">
+                    {calculations.fifteenPercentList.filter((f) => !f.isExpired).length} von {properties.length}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Aktive Überwachungszeiträume
+                  </span>
+                </div>
+
+                <div className="bg-secondary/40 rounded-xl p-3 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold block">
+                    Kritische Objekte
+                  </span>
+                  <span
+                    className={`text-2xl font-bold font-mono mt-0.5 block ${
+                      calculations.fifteenPercentList.some((f) => f.status === "EXCEEDED")
+                        ? "text-rose-500"
+                        : calculations.fifteenPercentList.some((f) => f.status === "WARNING")
+                        ? "text-amber-500"
+                        : "text-emerald-500"
+                    }`}
+                  >
+                    {
+                      calculations.fifteenPercentList.filter(
+                        (f) => !f.isExpired && (f.status === "EXCEEDED" || f.status === "WARNING")
+                      ).length
+                    }
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Ampel Rot / Gelb (&gt; 80% oder überschritten)
+                  </span>
+                </div>
+
+                <div className="bg-secondary/40 rounded-xl p-3 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold block">
+                    Gesamtes 15%-Budget
+                  </span>
+                  <span className="text-2xl font-bold font-mono text-primary mt-0.5 block">
+                    {formatCurrency(
+                      calculations.fifteenPercentList
+                        .filter((f) => !f.isExpired)
+                        .reduce((sum, f) => sum + f.limit15, 0)
+                    )}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Max. Netto-Sofortabzug aller Einheiten
+                  </span>
+                </div>
+
+                <div className="bg-secondary/40 rounded-xl p-3 border border-border/50">
+                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-semibold block">
+                    Bisher investiert (Netto)
+                  </span>
+                  <span className="text-2xl font-bold font-mono text-foreground mt-0.5 block">
+                    {formatCurrency(
+                      calculations.fifteenPercentList
+                        .filter((f) => !f.isExpired)
+                        .reduce((sum, f) => sum + f.totalSpentNet, 0)
+                    )}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Summe aller Sanierungsrechnungen
+                  </span>
+                </div>
+              </div>
+
+              {/* Tabelle aller Objekte */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                  <span>Überwachung je Wohnung</span>
+                  <span className="text-[11px] font-normal normal-case text-muted-foreground">
+                    Berechnungsbasis: Kaufpreis × Gebäudeanteil (ohne Grund &amp; Boden) × 15%
+                  </span>
+                </h4>
+
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-secondary/40 text-[11px]">
+                        <TableHead>Wohnung</TableHead>
+                        <TableHead>Erwerb / Fristende</TableHead>
+                        <TableHead className="text-right">Kaufpreis &amp; Quote</TableHead>
+                        <TableHead className="text-right">Gebäudewert (Netto)</TableHead>
+                        <TableHead className="text-right">15%-Limit</TableHead>
+                        <TableHead className="text-right">Bisher investiert</TableHead>
+                        <TableHead className="text-right">Verbleibender Puffer</TableHead>
+                        <TableHead className="text-center">Status / Ampel</TableHead>
+                        <TableHead className="w-24 text-center">Aktion</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {calculations.fifteenPercentList.map((item) => {
+                        return (
+                          <TableRow key={item.property.id} className="text-xs">
+                            <TableCell className="font-semibold text-sm">
+                              <div>{item.property.name}</div>
+                              <div className="text-xs text-muted-foreground">{item.property.address}</div>
+                            </TableCell>
+
+                            <TableCell>
+                              {item.acqDate ? (
+                                <div>
+                                  <div className="font-mono text-xs">
+                                    {formatDate(item.acqDate)}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                                    Frist: {item.deadlineEnd ? formatDate(item.deadlineEnd) : "–"}
+                                  </div>
+                                  {!item.isExpired ? (
+                                    <span className="text-[10px] font-medium text-primary">
+                                      noch ca. {item.monthsRemaining} Mo. ({item.daysRemaining} Tg.)
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      Frist abgelaufen
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">
+                                  Kein Kaufdatum
+                                </span>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-right font-mono text-sm">
+                              <div>{item.price > 0 ? formatCurrency(item.price) : "–"}</div>
+                              <span className="text-[10px] text-muted-foreground">
+                                {item.share}% Gebäude ({100 - item.share}% Boden)
+                              </span>
+                            </TableCell>
+
+                            <TableCell className="text-right font-mono text-sm font-medium">
+                              {item.price > 0 ? formatCurrency(item.buildingVal) : "–"}
+                            </TableCell>
+
+                            <TableCell className="text-right font-mono text-sm font-bold text-primary">
+                              {item.price > 0 ? formatCurrency(item.limit15) : "–"}
+                            </TableCell>
+
+                            <TableCell className="text-right font-mono text-sm">
+                              <span
+                                className={`font-semibold ${
+                                  item.status === "EXCEEDED"
+                                    ? "text-rose-500"
+                                    : item.status === "WARNING"
+                                    ? "text-amber-500"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {formatCurrency(item.totalSpentNet)}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground block">
+                                {item.investmentsCount} Maßnahme{item.investmentsCount === 1 ? "" : "n"}
+                              </span>
+                            </TableCell>
+
+                            <TableCell className="text-right font-mono text-sm">
+                              <span
+                                className={`font-bold ${
+                                  item.remainingBuffer < 0
+                                    ? "text-rose-600 dark:text-rose-400"
+                                    : item.remainingBuffer < item.limit15 * 0.2
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-emerald-600 dark:text-emerald-400"
+                                }`}
+                              >
+                                {item.price > 0 ? formatCurrency(item.remainingBuffer) : "–"}
+                              </span>
+                              {item.limit15 > 0 && !item.isExpired && (
+                                <div className="mt-1 w-20 ml-auto bg-secondary h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full ${
+                                      item.status === "EXCEEDED"
+                                        ? "bg-rose-500"
+                                        : item.status === "WARNING"
+                                        ? "bg-amber-500"
+                                        : "bg-emerald-500"
+                                    }`}
+                                    style={{ width: `${Math.min(100, item.usedPct)}%` }}
+                                  />
+                                </div>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {item.isExpired ? (
+                                <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground">
+                                  Frist beendet (Sicher)
+                                </Badge>
+                              ) : item.status === "EXCEEDED" ? (
+                                <Badge variant="destructive" className="text-[10px] animate-pulse">
+                                  Überschritten!
+                                </Badge>
+                              ) : item.status === "WARNING" ? (
+                                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+                                  Achtung (&gt;80%)
+                                </Badge>
+                              ) : item.acqDate ? (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                                  Sicher
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                                  Kaufdaten fehlen
+                                </Badge>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              <PropertyInvestmentsDialog
+                                property={item.property}
+                                onRefresh={loadData}
+                                trigger={
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                                    title="Investitionen & Sanierungen erfassen oder bearbeiten"
+                                  >
+                                    <Hammer className="h-3 w-3" />
+                                    <span>Verwalten</span>
+                                  </Button>
+                                }
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* Steuerliches Merkblatt & Rechtliche Hintergründe */}
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2 text-xs">
+                <h5 className="font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5 text-sm">
+                  <Info className="h-4 w-4" /> Gesetzliche Spielregeln (§ 6 Abs. 1 Nr. 1a EStG)
+                </h5>
+                <ul className="space-y-1 text-muted-foreground list-disc pl-4">
+                  <li>
+                    <strong>Netto-Beträge:</strong> Der Maßstab für die 15%-Grenze sind die Netto-Rechnungsbeträge (ohne Umsatzsteuer), selbst wenn Sie als Vermieter nicht vorsteuerabzugsberechtigt sind!
+                  </li>
+                  <li>
+                    <strong>Reiner Gebäudewert:</strong> Bemessungsgrundlage ist ausschließlich der auf das Gebäude entfallende Teil des Kaufpreises (z.B. 80%). Der Grund- und Bodenanteil (z.B. 20%) bleibt komplett außen vor.
+                  </li>
+                  <li>
+                    <strong>Stichtag für 3 Jahre:</strong> Maßgeblich ist der Übergang von Nutzen und Lasten (wirtschaftliches Eigentum), hilfsweise der Notarvertrag. Die Frist beträgt exakt 36 Monate.
+                  </li>
+                  <li>
+                    <strong>Was passiert bei Überschreitung?</strong> Werden mehr als 15% investiert, verliert man rückwirkend den Sofortabzug als Werbungskosten (Erhaltungsaufwand Zeile 39). Sämtliche Kosten müssen über 50 Jahre mit nur 2% p.a. linear abgeschrieben werden!
+                  </li>
+                  <li>
+                    <strong>Ausnahmen:</strong> Reine Schönheitsreparaturen und Erhaltungsarbeiten, die gewöhnlich jährlich anfallen (z.B. laufende Wartung der Heizung, Kleinreparaturen unter 100 €), zählen nach BFH-Rechtsprechung nicht in das 15%-Budget.
+                  </li>
+                </ul>
               </div>
             </CardContent>
           </Card>

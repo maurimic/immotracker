@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -14,6 +16,7 @@ export async function GET(
       meterReadings: { orderBy: { readingDate: "desc" }, take: 10 },
       rentAdjustments: { orderBy: { effectiveDate: "asc" } },
       documents: { orderBy: { uploadedAt: "desc" } },
+      investments: { orderBy: { date: "desc" } },
     },
   });
 
@@ -42,6 +45,7 @@ export async function PUT(
         purchasedAt: body.purchasedAt !== undefined ? (body.purchasedAt ? new Date(body.purchasedAt) : null) : undefined,
         possessionAt: body.possessionAt !== undefined ? (body.possessionAt ? new Date(body.possessionAt) : null) : undefined,
         ancillaryCosts: body.ancillaryCosts !== undefined ? (body.ancillaryCosts ? parseFloat(body.ancillaryCosts) : null) : undefined,
+        buildingSharePercent: body.buildingSharePercent !== undefined ? (body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80) : undefined,
         nonRecoverableCosts: body.nonRecoverableCosts !== undefined ? (body.nonRecoverableCosts !== "" && !isNaN(parseFloat(body.nonRecoverableCosts)) ? parseFloat(body.nonRecoverableCosts) : null) : undefined,
         maintenanceReserve: body.maintenanceReserve !== undefined ? (body.maintenanceReserve !== "" && !isNaN(parseFloat(body.maintenanceReserve)) ? parseFloat(body.maintenanceReserve) : null) : undefined,
       },
@@ -51,6 +55,7 @@ export async function PUT(
         tickets: true,
         rentAdjustments: true,
         documents: true,
+        investments: { orderBy: { date: "desc" } },
       },
     });
     return NextResponse.json(property);
@@ -137,7 +142,12 @@ export async function DELETE(
         where: { propertyId },
       });
 
-      // 9. Delete property itself
+      // 9. Delete investments
+      await tx.propertyInvestment.deleteMany({
+        where: { propertyId },
+      });
+
+      // 10. Delete property itself
       await tx.property.delete({
         where: { id: propertyId },
       });

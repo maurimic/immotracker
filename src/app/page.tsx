@@ -124,11 +124,15 @@ interface DashboardData {
   }>;
   historicCashflow: Array<{ period: string; amount: number }>;
   totalPurchasePrice?: number;
+  totalRenovations?: number;
+  totalAssetValue?: number;
   totalAncillaryCosts?: number;
   totalInvestment?: number;
   propertiesWithPriceCount?: number;
   portfolioYield?: number;
   portfolioMultiplier?: number;
+  fifteenPercentWarnings?: any[];
+  fifteenPercentMonitoring?: any[];
   accountBalance?: {
     amount: number;
     date: string;
@@ -178,6 +182,7 @@ export default function DashboardPage() {
   const totalWarnings =
     (data?.redFixedRates.length ?? 0) +
     (data?.overduePayments.length ?? 0) +
+    (data?.fifteenPercentWarnings?.length ?? 0) +
     (data?.openTickets.filter((t) => t.priority === "HIGH").length ?? 0);
 
   const highTickets = data?.openTickets.filter((t) => t.priority === "HIGH") ?? [];
@@ -195,8 +200,8 @@ export default function DashboardPage() {
 
   if (!data) return null;
 
-  // Vermögensbilanz & Schulden-Kennzahlen
-  const totalPropertyVal = data.totalPurchasePrice || 0;
+  // Vermögensbilanz & Schulden-Kennzahlen (Kaufpreis + aktivierte/wertsteigernde Investitionen)
+  const totalPropertyVal = (data.totalPurchasePrice || 0) + (data.totalRenovations || 0);
   const totalDebt = data.totalBalance || 0;
   const netEquity = Math.max(0, totalPropertyVal - totalDebt);
   const ltvPercent = totalPropertyVal > 0 ? (totalDebt / totalPropertyVal) * 100 : 0;
@@ -352,6 +357,47 @@ export default function DashboardPage() {
                               }}
                             >
                               Zur Instandhaltung <ArrowRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 4. 15%-Grenze Warnungen (§ 6 Abs. 1 Nr. 1a EStG) */}
+                  {data.fifteenPercentWarnings && data.fifteenPercentWarnings.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-rose-500 uppercase tracking-wider">
+                        <AlertTriangle className="h-4 w-4" />
+                        15%-Grenze Steuer-Warnung (§ 6 Abs. 1 Nr. 1a EStG) ({data.fifteenPercentWarnings.length})
+                      </div>
+                      <div className="space-y-2">
+                        {data.fifteenPercentWarnings.map((fp: any) => (
+                          <div
+                            key={fp.propertyId}
+                            className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm truncate">{fp.propertyName}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {fp.status === "EXCEEDED" ? (
+                                  <span className="text-rose-500 font-semibold">15%-Limit überschritten!</span>
+                                ) : (
+                                  <span className="text-amber-500 font-semibold">&gt; 80% des Budgets verbraucht</span>
+                                )}
+                                {" · "}Investiert: {formatCurrency(fp.totalSpentNet)} / Limit: {formatCurrency(fp.limit15Percent)}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 shrink-0 text-xs border-rose-500/40 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                              onClick={() => {
+                                setWarningsOpen(false);
+                                router.push("/steuern");
+                              }}
+                            >
+                              Zum Steuer-Check <ArrowRight className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         ))}
@@ -514,7 +560,7 @@ export default function DashboardPage() {
                     <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Gegenüberstellung von Sachwert (Portfolio-Kaufwert) und offenen Darlehensverbindlichkeiten
+                    Gegenüberstellung von Sachwert (Portfolio-Kaufwert + Sanierungen) und offenen Darlehensverbindlichkeiten
                   </p>
                 </div>
               </div>
@@ -530,7 +576,9 @@ export default function DashboardPage() {
                   </span>
                   <span className="text-[10px] text-muted-foreground">
                     {totalPropertyVal > 0
-                      ? `${data.propertiesWithPriceCount ?? 0} bewertete Einheit${(data.propertiesWithPriceCount ?? 0) === 1 ? "" : "en"}`
+                      ? data.totalRenovations && data.totalRenovations > 0
+                        ? `Kaufwert ${formatCurrency(data.totalPurchasePrice || 0)} + ${formatCurrency(data.totalRenovations)} Sanierungen`
+                        : `${data.propertiesWithPriceCount ?? 0} bewertete Einheit${(data.propertiesWithPriceCount ?? 0) === 1 ? "" : "en"}`
                       : "Kaufpreis in Wohnungen erfassen"}
                   </span>
                 </div>

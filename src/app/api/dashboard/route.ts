@@ -21,6 +21,9 @@ export async function GET() {
           rentAdjustments: {
             orderBy: { effectiveDate: "asc" },
           },
+          investments: {
+            orderBy: { date: "desc" },
+          },
         },
       }),
       prisma.payment.findMany({
@@ -101,11 +104,19 @@ export async function GET() {
     (sum, p) => sum + (p.purchasePrice || 0),
     0
   );
+  // Aktivierte (wertsteigernde) Investitionen / Sanierungen
+  const totalRenovations = properties.reduce((sum, p) => {
+    const invSum = (p.investments || [])
+      .filter((i) => i.isCapitalized)
+      .reduce((s, i) => s + i.amount, 0);
+    return sum + invSum;
+  }, 0);
+  const totalAssetValue = totalPurchasePrice + totalRenovations;
   const totalAncillaryCosts = properties.reduce(
     (sum, p) => sum + (p.ancillaryCosts || 0),
     0
   );
-  const totalInvestment = totalPurchasePrice + totalAncillaryCosts;
+  const totalInvestment = totalPurchasePrice + totalAncillaryCosts + totalRenovations;
   const propertiesWithPrice = properties.filter(
     (p) => (p.purchasePrice || 0) > 0
   );
@@ -287,6 +298,75 @@ export async function GET() {
     take: 6,
   });
 
+  // ─── 15%-Grenze (§ 6 Abs. 1 Nr. 1a EStG) Monitoring ───────────────────────
+  const fifteenPercentMonitoring = properties.map((property) => {
+    const acqDate = property.possessionAt || property.purchasedAt;
+    const purchasePrice = property.purchasePrice || 0;
+    const buildingShare = property.buildingSharePercent ?? 80;
+    const buildingValue = purchasePrice * (buildingShare / 100);
+    const limit15Percent = buildingValue * 0.15;
+
+    let deadlineEnd: Date | null = null;
+    let isExpired = false;
+    let daysRemaining = 0;
+
+    if (acqDate) {
+      deadlineEnd = new Date(acqDate);
+      deadlineEnd.setFullYear(deadlineEnd.getFullYear() + 3);
+      isExpired = now > deadlineEnd;
+      daysRemaining = Math.max(0, Math.ceil((deadlineEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    // Netto-Sanierungskosten innerhalb der 3 Jahre mit relevantFor15Percent = true
+    const investmentsInPeriod = (property.investments || []).filter((inv) => {
+      if (!inv.relevantFor15Percent) return false;
+      if (!acqDate || !deadlineEnd) return true;
+      const d = new Date(inv.date);
+      return d >= new Date(acqDate) && d <= deadlineEnd;
+    });
+
+    const totalSpentNet = investmentsInPeriod.reduce((sum, inv) => {
+      const net = inv.amountNet != null ? inv.amountNet : Math.round((inv.amount / 1.19) * 100) / 100;
+      return sum + net;
+    }, 0);
+
+    const totalSpentGross = investmentsInPeriod.reduce((sum, inv) => sum + inv.amount, 0);
+    const remainingBuffer = limit15Percent - totalSpentNet;
+    const usedPercent = limit15Percent > 0 ? (totalSpentNet / limit15Percent) * 100 : 0;
+
+    let status: "OK" | "WARNING" | "EXCEEDED" | "EXPIRED" = "OK";
+    if (isExpired) {
+      status = "EXPIRED";
+    } else if (totalSpentNet > limit15Percent && limit15Percent > 0) {
+      status = "EXCEEDED";
+    } else if (usedPercent >= 80 && limit15Percent > 0) {
+      status = "WARNING";
+    }
+
+    return {
+      propertyId: property.id,
+      propertyName: property.name,
+      purchasePrice,
+      buildingShare,
+      buildingValue,
+      limit15Percent,
+      acqDate: acqDate?.toISOString() || null,
+      deadlineEnd: deadlineEnd?.toISOString() || null,
+      isExpired,
+      daysRemaining,
+      totalSpentNet,
+      totalSpentGross,
+      remainingBuffer,
+      usedPercent,
+      status,
+      investmentsCount: investmentsInPeriod.length,
+    };
+  });
+
+  const fifteenPercentWarnings = fifteenPercentMonitoring.filter(
+    (m) => (m.status === "EXCEEDED" || m.status === "WARNING") && !m.isExpired
+  );
+
   return NextResponse.json({
     // Kredit-KPIs
     totalOriginal,
@@ -318,14 +398,20 @@ export async function GET() {
     upcomingRentAdjustments: rentAdjustments,
     redFixedRates: fixedRateStatus.filter((f) => f.trafficLight === "RED"),
     overduePayments: paymentStatus.filter((p) => p.status === "OVERDUE"),
+    fifteenPercentWarnings,
 
     // Kaufpreis- & Investitions-KPIs
     totalPurchasePrice,
+    totalRenovations,
+    totalAssetValue,
     totalAncillaryCosts,
     totalInvestment,
     propertiesWithPriceCount: propertiesWithPrice.length,
     portfolioYield,
     portfolioMultiplier,
+
+    // 15%-Grenze Monitoring
+    fifteenPercentMonitoring,
 
     // Google Sheets Kontostand
     accountBalance,

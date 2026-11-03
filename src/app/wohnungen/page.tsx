@@ -6,7 +6,8 @@ import {
   Building2, Plus, Users, Euro, FileText, ChevronRight,
   Phone, Mail, Calendar, CreditCard, Edit, Trash2, X, TrendingUp,
   AlertCircle, ShieldCheck, Clock, Calculator, Upload, Check,
-  UserPlus, UserMinus, AlertTriangle, Home, Coins, Percent, ArrowUpRight, ArrowRight, Info
+  UserPlus, UserMinus, AlertTriangle, Home, Coins, Percent, ArrowUpRight, ArrowRight, Info,
+  Hammer, ShieldAlert
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { RentAdjustmentDialog } from "@/components/RentAdjustmentDialog";
+import { PropertyInvestmentsDialog, PropertyInvestment } from "@/components/PropertyInvestmentsDialog";
 
 interface Tenant {
   id: string;
@@ -62,12 +64,14 @@ interface Property {
   purchasedAt?: string | null;
   possessionAt?: string | null;
   ancillaryCosts?: number | null;
+  buildingSharePercent?: number | null;
   nonRecoverableCosts?: number | null;
   maintenanceReserve?: number | null;
   tenant: Tenant | null;
   loans: Array<{ id: string; originalAmount: number; currentBalance: number }>;
   tickets: Array<{ id: string; status: string; priority: string }>;
   rentAdjustments: RentAdjustment[];
+  investments?: PropertyInvestment[];
   documents: Array<{
     id: string;
     name: string;
@@ -104,6 +108,7 @@ function EditPropertyDialog({
     purchasedAt: property.purchasedAt ? property.purchasedAt.split("T")[0] : "",
     possessionAt: property.possessionAt ? property.possessionAt.split("T")[0] : "",
     ancillaryCosts: property.ancillaryCosts ? property.ancillaryCosts.toString() : "",
+    buildingSharePercent: property.buildingSharePercent != null ? property.buildingSharePercent.toString() : "80",
     nonRecoverableCosts: property.nonRecoverableCosts != null ? property.nonRecoverableCosts.toString() : "",
     maintenanceReserve: property.maintenanceReserve != null ? property.maintenanceReserve.toString() : "",
   });
@@ -272,6 +277,53 @@ function EditPropertyDialog({
                 />
                 <p className="text-[10px] text-muted-foreground">Wirtschaftlicher Übergang (Rechte/Miete)</p>
               </div>
+            </div>
+
+            {/* Gebäudeanteil & 15%-Grenzen Berechnung */}
+            <div className="space-y-2 pt-2 border-t border-border/40">
+              <div className="grid grid-cols-2 gap-3 items-center">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Gebäudeanteil (%)</Label>
+                    <span className="text-[10px] text-muted-foreground">Standard: 80%</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min="10"
+                    max="100"
+                    step="1"
+                    placeholder="80"
+                    value={form.buildingSharePercent}
+                    onChange={(e) => setForm({ ...form, buildingSharePercent: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Für AfA & 15%-Grenze (§ 6 EStG)</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Bodenanteil (%)</Label>
+                  <div className="h-9 px-3 rounded-md border border-input bg-muted/40 flex items-center font-mono text-xs text-muted-foreground">
+                    {100 - (parseFloat(form.buildingSharePercent) || 80)}% (nicht abschreibbar)
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Grund und Boden Anteil</p>
+                </div>
+              </div>
+
+              {/* Live Vorschau Gebäudewert & 15%-Budget */}
+              {parseFloat(form.purchasePrice) > 0 && (
+                <div className="p-2.5 rounded-lg bg-secondary/40 border border-border/60 text-xs space-y-1">
+                  <div className="flex justify-between items-center text-muted-foreground">
+                    <span>Gebäudewert (AfA- & 15%-Basis):</span>
+                    <span className="font-mono font-bold text-foreground">
+                      {formatCurrency(parseFloat(form.purchasePrice) * ((parseFloat(form.buildingSharePercent) || 80) / 100))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-muted-foreground text-[11px]">
+                    <span>15%-Grenzen Budget (§ 6 EStG netto):</span>
+                    <span className="font-mono font-semibold text-primary">
+                      {formatCurrency(parseFloat(form.purchasePrice) * ((parseFloat(form.buildingSharePercent) || 80) / 100) * 0.15)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Optionaler Nebenkosten-Prozent-Rechner */}
@@ -1005,6 +1057,44 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
   const grossYield = price > 0 && annualColdRent > 0 ? ((annualColdRent / price) * 100).toFixed(2) : null;
   const multiplier = price > 0 && annualColdRent > 0 ? (price / annualColdRent).toFixed(1) : null;
 
+  // Investitionen & Sanierungen Auswertung
+  const totalInvestments = (property.investments || []).reduce((s, i) => s + i.amount, 0);
+  const totalCapitalized = (property.investments || [])
+    .filter((i) => i.isCapitalized)
+    .reduce((s, i) => s + i.amount, 0);
+  const totalAssetValue = price + totalCapitalized;
+
+  // 15%-Grenzen Berechnung (§ 6 Abs. 1 Nr. 1a EStG)
+  const buildingShare = property.buildingSharePercent ?? 80;
+  const buildingVal = price * (buildingShare / 100);
+  const limit15 = buildingVal * 0.15;
+  const acqDate = property.possessionAt || property.purchasedAt;
+  let deadlineEnd: Date | null = null;
+  let isExpired = false;
+  let monthsRemaining = 0;
+  if (acqDate) {
+    deadlineEnd = new Date(acqDate);
+    deadlineEnd.setFullYear(deadlineEnd.getFullYear() + 3);
+    const now = new Date();
+    isExpired = now > deadlineEnd;
+    monthsRemaining = Math.max(0, Math.ceil((deadlineEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30.4)));
+  }
+
+  const relevantInvestments = (property.investments || []).filter((inv) => {
+    if (!inv.relevantFor15Percent) return false;
+    if (!acqDate || !deadlineEnd) return true;
+    const d = new Date(inv.date);
+    return d >= new Date(acqDate) && d <= deadlineEnd;
+  });
+
+  const spentNet15 = relevantInvestments.reduce((sum, inv) => {
+    return sum + (inv.amountNet != null ? inv.amountNet : Math.round((inv.amount / 1.19) * 100) / 100);
+  }, 0);
+  const buffer15 = limit15 - spentNet15;
+  const used15Pct = limit15 > 0 ? (spentNet15 / limit15) * 100 : 0;
+  const isExceeded15 = !isExpired && limit15 > 0 && spentNet15 > limit15;
+  const isWarning15 = !isExpired && limit15 > 0 && !isExceeded15 && used15Pct >= 80;
+
   return (
     <Card className="hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
       <CardContent className="pt-5 pb-5 space-y-4">
@@ -1096,8 +1186,106 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
                 )}
               </div>
             )}
+
+            {/* Sanierungen & Gesamtwert */}
+            {totalCapitalized > 0 && (
+              <div className="pt-1.5 border-t border-border/30 space-y-1 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                    <Hammer className="h-3 w-3" /> + Investitionen & Sanierung:
+                  </span>
+                  <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                    +{formatCurrency(totalCapitalized)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between font-semibold">
+                  <span className="text-foreground">Aktueller Sachwert:</span>
+                  <span className="font-mono text-primary">{formatCurrency(totalAssetValue)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 15%-Grenzen Monitor Mini-Card */}
+            {price > 0 && (
+              <div
+                className={`p-2 rounded-lg text-xs space-y-1.5 border mt-1 ${
+                  isExceeded15
+                    ? "bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300"
+                    : isWarning15
+                    ? "bg-amber-500/10 border-amber-500/30"
+                    : isExpired
+                    ? "bg-muted/40 border-border/40 text-muted-foreground"
+                    : "bg-emerald-500/5 border-emerald-500/20"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold flex items-center gap-1">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    15%-Grenze (§ 6 EStG):
+                  </span>
+                  {isExpired ? (
+                    <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 bg-muted/60 text-muted-foreground">
+                      Frist beendet (Sicher)
+                    </Badge>
+                  ) : isExceeded15 ? (
+                    <Badge variant="destructive" className="text-[9px] h-4 px-1 py-0 animate-pulse">
+                      Überschritten!
+                    </Badge>
+                  ) : isWarning15 ? (
+                    <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/30">
+                      &gt; 80% verbraucht
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                      Puffer: {formatCurrency(buffer15)}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono">
+                  <span>Investiert: {formatCurrency(spentNet15)}</span>
+                  <span>Budget: {formatCurrency(limit15)}</span>
+                </div>
+                {!isExpired && limit15 > 0 && (
+                  <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${
+                        isExceeded15 ? "bg-rose-500" : isWarning15 ? "bg-amber-500" : "bg-emerald-500"
+                      }`}
+                      style={{ width: `${Math.min(100, used15Pct)}%` }}
+                    />
+                  </div>
+                )}
+                {acqDate && !isExpired && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Fristende: {formatDate(deadlineEnd!)} (noch ca. {monthsRemaining} Mo.)
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
+
+        {/* Investitionen & Sanierungen Button */}
+        <PropertyInvestmentsDialog
+          property={property}
+          onRefresh={onRefresh}
+          trigger={
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10 shadow-sm"
+              title="Investitionen & Sanierungen erfassen, 15%-Grenzen Monitor öffnen"
+            >
+              <Hammer className="h-3.5 w-3.5" />
+              <span>Investitionen & Sanierungen</span>
+              {property.investments && property.investments.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] h-4 px-1.5 py-0 ml-auto font-mono">
+                  {property.investments.length}
+                </Badge>
+              )}
+            </Button>
+          }
+        />
 
         {/* Laufende Bewirtschaftungskosten (Netto-Cashflow Parameter) */}
         <div className="bg-secondary/30 rounded-xl p-2.5 text-xs space-y-1.5 border border-border/40">
@@ -1352,6 +1540,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
     purchasedAt: "",
     possessionAt: "",
     ancillaryCosts: "",
+    buildingSharePercent: "80",
     nonRecoverableCosts: "",
     maintenanceReserve: "",
     // Mieterdaten (optional)
@@ -1398,6 +1587,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
       purchasedAt: form.purchasedAt || null,
       possessionAt: form.possessionAt || null,
       ancillaryCosts: form.ancillaryCosts ? parseFloat(form.ancillaryCosts) : null,
+      buildingSharePercent: form.buildingSharePercent ? parseFloat(form.buildingSharePercent) : 80,
       nonRecoverableCosts: form.nonRecoverableCosts ? parseFloat(form.nonRecoverableCosts) : null,
       maintenanceReserve: form.maintenanceReserve ? parseFloat(form.maintenanceReserve) : null,
       ...(withTenant && form.tenantLastName
@@ -1600,6 +1790,53 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 />
                 <p className="text-[10px] text-muted-foreground">Wirtschaftlicher Übergang (Rechte/Miete)</p>
               </div>
+            </div>
+
+            {/* Gebäudeanteil & 15%-Grenzen Berechnung */}
+            <div className="space-y-2 pt-2 border-t border-border/40">
+              <div className="grid grid-cols-2 gap-3 items-center">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Gebäudeanteil (%)</Label>
+                    <span className="text-[10px] text-muted-foreground">Standard: 80%</span>
+                  </div>
+                  <Input
+                    type="number"
+                    min="10"
+                    max="100"
+                    step="1"
+                    placeholder="80"
+                    value={form.buildingSharePercent}
+                    onChange={(e) => setForm({ ...form, buildingSharePercent: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Für AfA & 15%-Grenze (§ 6 EStG)</p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Bodenanteil (%)</Label>
+                  <div className="h-9 px-3 rounded-md border border-input bg-muted/40 flex items-center font-mono text-xs text-muted-foreground">
+                    {100 - (parseFloat(form.buildingSharePercent) || 80)}% (nicht abschreibbar)
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Grund und Boden Anteil</p>
+                </div>
+              </div>
+
+              {/* Live Vorschau Gebäudewert & 15%-Budget */}
+              {parseFloat(form.purchasePrice) > 0 && (
+                <div className="p-2.5 rounded-lg bg-secondary/40 border border-border/60 text-xs space-y-1">
+                  <div className="flex justify-between items-center text-muted-foreground">
+                    <span>Gebäudewert (AfA- & 15%-Basis):</span>
+                    <span className="font-mono font-bold text-foreground">
+                      {formatCurrency(parseFloat(form.purchasePrice) * ((parseFloat(form.buildingSharePercent) || 80) / 100))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-muted-foreground text-[11px]">
+                    <span>15%-Grenzen Budget (§ 6 EStG netto):</span>
+                    <span className="font-mono font-semibold text-primary">
+                      {formatCurrency(parseFloat(form.purchasePrice) * ((parseFloat(form.buildingSharePercent) || 80) / 100) * 0.15)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Optionaler Nebenkosten-Prozent-Rechner */}

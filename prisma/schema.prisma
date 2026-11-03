@@ -25,6 +25,7 @@ model Property {
   purchasedAt    DateTime? // Kaufvertragsdatum (Notartermin)
   possessionAt   DateTime? // Nutzen- & Lastenwechsel (wirtschaftlicher Eigentumsübergang)
   ancillaryCosts Float?    // Kaufnebenkosten in € (Grunderwerbsteuer, Notar, Makler)
+  buildingSharePercent Float? @default(80) // Gebäudeanteil in % (Standard 80%) für AfA & 15%-Grenze
   
   // Laufende Bewirtschaftung & Cashflow (monatlich)
   nonRecoverableCosts Float?   // Nicht-umlagefähige Betriebskosten / Hausgeld monatlich in € (Verwaltung, Instandhaltung WEG)
@@ -40,6 +41,7 @@ model Property {
   loans       Loan[]
   payments    Payment[]
   tickets     MaintenanceTicket[]
+  investments PropertyInvestment[]
   meterReadings MeterReading[]
   rentAdjustments RentAdjustment[]
   utilityBills   UtilityBill[]
@@ -291,6 +293,33 @@ model MeterReading {
   createdAt    DateTime @default(now())
 
   @@map("meter_readings")
+}
+
+// ─── Modul E: Investitionen & Sanierungen (15%-Grenze & Vermögenswert) ────
+
+model PropertyInvestment {
+  id                   String    @id @default(cuid())
+  propertyId           String
+  property             Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  title                String    // z.B. "Neue Heizung", "Badsanierung", "Böden & Türen"
+  description          String?
+  amount               Float     // Bruttobetrag in €
+  amountNet            Float?    // Nettobetrag in € (Maßstab für die 15%-Grenze nach § 6 Abs. 1 Nr. 1a EStG)
+  date                 DateTime  // Rechnungs- / Fertigstellungsdatum
+  craftsman            String?   // Handwerker / Dienstleister
+  category             String    @default("SANIERUNG") // "HEIZUNG" | "BAD" | "FENSTER" | "DACH" | "BODEN" | "ELEKTRIK" | "SANIERUNG" | "SONSTIGES"
+
+  // Wertsteigernd: Fließt in Vermögensbilanz / Anschaffungskosten ein
+  isCapitalized        Boolean   @default(true) // Erhöht den Portfoliowert der Immobilie
+
+  // Steuerliche Relevanz für 15%-Grenze (§ 6 Abs. 1 Nr. 1a EStG)
+  relevantFor15Percent Boolean   @default(true) // Zählt in den ersten 3 Jahren nach Erwerb
+
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("property_investments")
 }
 
 // ─── Dokumente ───────────────────────────────────────────────────────────────
