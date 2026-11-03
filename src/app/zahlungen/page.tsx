@@ -1680,6 +1680,11 @@ function ZahlungenContent() {
   const [properties, setProperties] = useState<Array<{ id: string; name: string; address: string }>>([]);
   const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accountBalance, setAccountBalance] = useState<{
+    amount: number;
+    date: string;
+    formattedDate: string;
+  } | null>(null);
   const [period, setPeriod] = useState<string>(initialPeriod); // Standardmäßig auf den aktiven Monat
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [showPurpose, setShowPurpose] = useState<boolean>(true); // Bonus: Verwendungszweck ein-/ausblenden
@@ -1737,10 +1742,29 @@ function ZahlungenContent() {
     }
   };
 
+  const fetchAccountBalance = async () => {
+    try {
+      const res = await fetch("/api/kontostand");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && typeof data.amount === "number") {
+          setAccountBalance({
+            amount: data.amount,
+            date: data.date,
+            formattedDate: data.formattedDate,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Fehler beim Laden des Kontostands:", err);
+    }
+  };
+
   useEffect(() => {
     fetchTenants();
     fetchPayments();
     fetchPropertiesAndLoans();
+    fetchAccountBalance();
   }, []);
 
   // Alle verfügbaren Perioden aus den Zahlungsdaten extrahieren
@@ -2162,22 +2186,43 @@ function ZahlungenContent() {
           </Select>
 
           {/* n8n Comdirect Bankabruf (Maurizio & Steven) mit Auto-Sync */}
-          <N8nBankSyncButtons onSyncComplete={() => { fetchPayments(); fetchTenants(); }} />
+          <N8nBankSyncButtons onSyncComplete={() => { fetchPayments(); fetchTenants(); fetchAccountBalance(); }} />
 
           {/* Zuordnungen neu abgleichen (Re-Match) */}
-          <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); }} />
+          <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); fetchAccountBalance(); }} />
 
           {/* Google Sheets Sync & Status */}
-          <GoogleSheetsDialog onSyncComplete={fetchPayments} />
+          <GoogleSheetsDialog onSyncComplete={() => { fetchPayments(); fetchAccountBalance(); }} />
 
           {/* Optionaler manueller CSV Import */}
-          <CsvUploadDialog onUploaded={fetchPayments} />
+          <CsvUploadDialog onUploaded={() => { fetchPayments(); fetchAccountBalance(); }} />
         </div>
       </div>
 
-      {/* KPI Cards: Geldeingänge, Geldausgänge, Balance, Buchungen, Handlungsbedarf */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {/* 1. Geldeingänge */}
+      {/* KPI Cards: Kontostand, Geldeingänge, Geldausgänge, Balance, Buchungen, Handlungsbedarf */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* 1. Aktueller Kontostand */}
+        <Card className="shadow-sm border-blue-500/20 bg-blue-500/5 dark:bg-blue-500/10">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+              <span className="font-semibold text-foreground">Kontostand</span>
+              <Landmark className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <p className="text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">
+              {accountBalance ? formatCurrency(accountBalance.amount) : "–"}
+            </p>
+            <p
+              className="text-[11px] text-muted-foreground mt-0.5 truncate"
+              title={accountBalance ? `Stand: ${accountBalance.formattedDate}` : undefined}
+            >
+              {accountBalance
+                ? `Stand: ${accountBalance.formattedDate}`
+                : "Wird geladen..."}
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* 2. Geldeingänge */}
         <Card className="shadow-sm">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
