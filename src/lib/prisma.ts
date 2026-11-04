@@ -19,10 +19,36 @@ export async function ensureSchema() {
   schemaInitialized = true;
   try {
     const cols = (await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info(properties)`)) || [];
-    const hasBuildingShare = cols.some((c) => c.name === "buildingSharePercent");
-    if (!hasBuildingShare) {
+    const colNames = new Set(cols.map((c) => c.name));
+
+    if (!colNames.has("buildingSharePercent")) {
       await prisma.$executeRawUnsafe(
         `ALTER TABLE "properties" ADD COLUMN "buildingSharePercent" REAL DEFAULT 80;`
+      );
+    }
+    if (!colNames.has("propertyTransferTax")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "propertyTransferTax" REAL;`
+      );
+    }
+    if (!colNames.has("notaryCosts")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "notaryCosts" REAL;`
+      );
+    }
+    if (!colNames.has("landRegisterCosts")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "landRegisterCosts" REAL;`
+      );
+    }
+    if (!colNames.has("brokerCosts")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "brokerCosts" REAL;`
+      );
+    }
+    if (!colNames.has("otherAncillaryCosts")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "otherAncillaryCosts" REAL;`
       );
     }
 

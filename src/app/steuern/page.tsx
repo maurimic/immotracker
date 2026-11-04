@@ -52,6 +52,11 @@ interface Property {
   purchasedAt?: string | null;
   possessionAt?: string | null;
   ancillaryCosts?: number | null;
+  propertyTransferTax?: number | null;
+  notaryCosts?: number | null;
+  landRegisterCosts?: number | null;
+  brokerCosts?: number | null;
+  otherAncillaryCosts?: number | null;
   buildingSharePercent?: number | null;
   investments?: Array<{
     id: string;

@@ -24,7 +24,12 @@ model Property {
   purchasePrice  Float?    // Kaufpreis in €
   purchasedAt    DateTime? // Kaufvertragsdatum (Notartermin)
   possessionAt   DateTime? // Nutzen- & Lastenwechsel (wirtschaftlicher Eigentumsübergang)
-  ancillaryCosts Float?    // Kaufnebenkosten in € (Grunderwerbsteuer, Notar, Makler)
+  ancillaryCosts Float?    // Kaufnebenkosten Gesamt in €
+  propertyTransferTax  Float?    // Grunderwerbsteuer in €
+  notaryCosts          Float?    // Notarkosten (Beurkundung Kaufvertrag) in €
+  landRegisterCosts    Float?    // Grundbuchkosten (Eigentumsumschreibung) in €
+  brokerCosts          Float?    // Maklerprovision in €
+  otherAncillaryCosts  Float?    // Sonstige Nebenkosten (z.B. Gutachten) in €
   buildingSharePercent Float? @default(80) // Gebäudeanteil in % (Standard 80%) für AfA & 15%-Grenze
   
   // Laufende Bewirtschaftung & Cashflow (monatlich)

@@ -33,6 +33,29 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
+
+    const parseOptFloat = (val: any) =>
+      val !== undefined
+        ? val !== "" && val !== null && !isNaN(parseFloat(val))
+          ? parseFloat(val)
+          : null
+        : undefined;
+
+    const pTax = parseOptFloat(body.propertyTransferTax);
+    const notary = parseOptFloat(body.notaryCosts);
+    const landReg = parseOptFloat(body.landRegisterCosts);
+    const broker = parseOptFloat(body.brokerCosts);
+    const otherAnc = parseOptFloat(body.otherAncillaryCosts);
+
+    let explicitAnc = parseOptFloat(body.ancillaryCosts);
+    if (
+      explicitAnc === undefined &&
+      (pTax !== undefined || notary !== undefined || landReg !== undefined || broker !== undefined || otherAnc !== undefined)
+    ) {
+      const sum = (pTax || 0) + (notary || 0) + (landReg || 0) + (broker || 0) + (otherAnc || 0);
+      explicitAnc = sum > 0 ? sum : null;
+    }
+
     const property = await prisma.property.update({
       where: { id: params.id },
       data: {
@@ -44,7 +67,12 @@ export async function PUT(
         purchasePrice: body.purchasePrice !== undefined ? (body.purchasePrice ? parseFloat(body.purchasePrice) : null) : undefined,
         purchasedAt: body.purchasedAt !== undefined ? (body.purchasedAt ? new Date(body.purchasedAt) : null) : undefined,
         possessionAt: body.possessionAt !== undefined ? (body.possessionAt ? new Date(body.possessionAt) : null) : undefined,
-        ancillaryCosts: body.ancillaryCosts !== undefined ? (body.ancillaryCosts ? parseFloat(body.ancillaryCosts) : null) : undefined,
+        ancillaryCosts: explicitAnc,
+        propertyTransferTax: pTax,
+        notaryCosts: notary,
+        landRegisterCosts: landReg,
+        brokerCosts: broker,
+        otherAncillaryCosts: otherAnc,
         buildingSharePercent: body.buildingSharePercent !== undefined ? (body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80) : undefined,
         nonRecoverableCosts: body.nonRecoverableCosts !== undefined ? (body.nonRecoverableCosts !== "" && !isNaN(parseFloat(body.nonRecoverableCosts)) ? parseFloat(body.nonRecoverableCosts) : null) : undefined,
         maintenanceReserve: body.maintenanceReserve !== undefined ? (body.maintenanceReserve !== "" && !isNaN(parseFloat(body.maintenanceReserve)) ? parseFloat(body.maintenanceReserve) : null) : undefined,

@@ -58,6 +58,20 @@ export async function POST(request: Request) {
         }
       : null;
 
+    const parseOptFloat = (val: any) =>
+      val !== undefined && val !== "" && val !== null && !isNaN(parseFloat(val))
+        ? parseFloat(val)
+        : null;
+
+    const pTax = parseOptFloat(body.propertyTransferTax);
+    const notary = parseOptFloat(body.notaryCosts);
+    const landReg = parseOptFloat(body.landRegisterCosts);
+    const broker = parseOptFloat(body.brokerCosts);
+    const otherAnc = parseOptFloat(body.otherAncillaryCosts);
+    const sumDetailed = (pTax || 0) + (notary || 0) + (landReg || 0) + (broker || 0) + (otherAnc || 0);
+    const explicitAnc = parseOptFloat(body.ancillaryCosts);
+    const totalAncillary = explicitAnc !== null ? explicitAnc : sumDetailed > 0 ? sumDetailed : null;
+
     const property = await prisma.property.create({
       data: {
         name: body.name,
@@ -65,13 +79,18 @@ export async function POST(request: Request) {
         sqm: parseFloat(body.sqm),
         floor: body.floor || null,
         rooms: body.rooms ? parseFloat(body.rooms) : null,
-        purchasePrice: body.purchasePrice !== undefined && body.purchasePrice !== "" && !isNaN(parseFloat(body.purchasePrice)) ? parseFloat(body.purchasePrice) : null,
+        purchasePrice: parseOptFloat(body.purchasePrice),
         purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : null,
         possessionAt: body.possessionAt ? new Date(body.possessionAt) : null,
-        ancillaryCosts: body.ancillaryCosts !== undefined && body.ancillaryCosts !== "" && !isNaN(parseFloat(body.ancillaryCosts)) ? parseFloat(body.ancillaryCosts) : null,
+        ancillaryCosts: totalAncillary,
+        propertyTransferTax: pTax,
+        notaryCosts: notary,
+        landRegisterCosts: landReg,
+        brokerCosts: broker,
+        otherAncillaryCosts: otherAnc,
         buildingSharePercent: body.buildingSharePercent !== undefined && body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80,
-        nonRecoverableCosts: body.nonRecoverableCosts !== undefined && body.nonRecoverableCosts !== "" && !isNaN(parseFloat(body.nonRecoverableCosts)) ? parseFloat(body.nonRecoverableCosts) : null,
-        maintenanceReserve: body.maintenanceReserve !== undefined && body.maintenanceReserve !== "" && !isNaN(parseFloat(body.maintenanceReserve)) ? parseFloat(body.maintenanceReserve) : null,
+        nonRecoverableCosts: parseOptFloat(body.nonRecoverableCosts),
+        maintenanceReserve: parseOptFloat(body.maintenanceReserve),
         ...(tenantInput ? { tenant: { create: tenantInput } } : {}),
       },
       include: {

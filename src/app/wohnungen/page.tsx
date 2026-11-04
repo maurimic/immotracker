@@ -7,7 +7,7 @@ import {
   Phone, Mail, Calendar, CreditCard, Edit, Trash2, X, TrendingUp,
   AlertCircle, ShieldCheck, Clock, Calculator, Upload, Check,
   UserPlus, UserMinus, AlertTriangle, Home, Coins, Percent, ArrowUpRight, ArrowRight, Info,
-  Hammer, ShieldAlert
+  Hammer, ShieldAlert, ChevronDown, ChevronUp, Receipt
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,11 @@ interface Property {
   purchasedAt?: string | null;
   possessionAt?: string | null;
   ancillaryCosts?: number | null;
+  propertyTransferTax?: number | null;
+  notaryCosts?: number | null;
+  landRegisterCosts?: number | null;
+  brokerCosts?: number | null;
+  otherAncillaryCosts?: number | null;
   buildingSharePercent?: number | null;
   nonRecoverableCosts?: number | null;
   maintenanceReserve?: number | null;
@@ -83,6 +88,345 @@ interface Property {
   }>;
 }
 
+// ─── Detaillierte Kaufnebenkosten Eingabe & Aufteilung ───────────────────────
+function DetailedAncillaryCostsSection({
+  form,
+  setForm,
+}: {
+  form: any;
+  setForm: React.Dispatch<React.SetStateAction<any>>;
+}) {
+  const hasDetailedValues = Boolean(
+    form.propertyTransferTax ||
+    form.notaryCosts ||
+    form.landRegisterCosts ||
+    form.brokerCosts ||
+    form.otherAncillaryCosts
+  );
+
+  const [expanded, setExpanded] = useState<boolean>(hasDetailedValues);
+
+  const price = parseFloat(form.purchasePrice) || 0;
+
+  const pTax = parseFloat(form.propertyTransferTax) || 0;
+  const notary = parseFloat(form.notaryCosts) || 0;
+  const landReg = parseFloat(form.landRegisterCosts) || 0;
+  const broker = parseFloat(form.brokerCosts) || 0;
+  const other = parseFloat(form.otherAncillaryCosts) || 0;
+  const detailedSum = pTax + notary + landReg + broker + other;
+
+  const currentTotal = parseFloat(form.ancillaryCosts) || 0;
+
+  const updateDetailedField = (field: string, value: string) => {
+    setForm((prev: any) => {
+      const next = { ...prev, [field]: value };
+      const nextPTax = field === "propertyTransferTax" ? parseFloat(value) || 0 : parseFloat(next.propertyTransferTax) || 0;
+      const nextNotary = field === "notaryCosts" ? parseFloat(value) || 0 : parseFloat(next.notaryCosts) || 0;
+      const nextLandReg = field === "landRegisterCosts" ? parseFloat(value) || 0 : parseFloat(next.landRegisterCosts) || 0;
+      const nextBroker = field === "brokerCosts" ? parseFloat(value) || 0 : parseFloat(next.brokerCosts) || 0;
+      const nextOther = field === "otherAncillaryCosts" ? parseFloat(value) || 0 : parseFloat(next.otherAncillaryCosts) || 0;
+
+      const newSum = nextPTax + nextNotary + nextLandReg + nextBroker + nextOther;
+      if (newSum > 0 || (value === "" && nextPTax === 0 && nextNotary === 0 && nextLandReg === 0 && nextBroker === 0 && nextOther === 0)) {
+        next.ancillaryCosts = newSum > 0 ? (Number.isInteger(newSum) ? newSum.toString() : newSum.toFixed(2)) : "";
+      }
+      return next;
+    });
+  };
+
+  const applyPercentToField = (field: string, pct: number) => {
+    if (price <= 0) {
+      toast({
+        title: "Kaufpreis benötigt",
+        description: "Bitte zuerst einen Kaufpreis eingeben, um den Prozentwert zu berechnen.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const val = Math.round(price * (pct / 100));
+    updateDetailedField(field, val.toString());
+  };
+
+  return (
+    <div className="space-y-2 pt-2 border-t border-border/40">
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <Label className="text-xs font-semibold flex items-center gap-1.5">
+            <Receipt className="h-3.5 w-3.5 text-primary" />
+            Kaufnebenkosten (€)
+          </Label>
+          <p className="text-[10px] text-muted-foreground">
+            Grunderwerbsteuer, Notar, Grundbuch, Makler
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium bg-primary/10 hover:bg-primary/20 px-2 py-1 rounded transition-colors"
+        >
+          {expanded ? (
+            <>
+              <ChevronUp className="h-3 w-3" /> Details verbergen
+            </>
+          ) : (
+            <>
+              <ChevronDown className="h-3 w-3" /> Aufschlüsselung {detailedSum > 0 ? `(${formatCurrency(detailedSum)})` : "öffnen"}
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Gesamtsumme Eingabefeld */}
+      <div className="grid grid-cols-2 gap-3 items-center">
+        <div className="space-y-1">
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="z.B. 23500"
+            value={form.ancillaryCosts}
+            onChange={(e) => setForm((prev: any) => ({ ...prev, ancillaryCosts: e.target.value }))}
+          />
+        </div>
+        <div className="text-[11px] text-muted-foreground leading-tight">
+          {price > 0 && currentTotal > 0 ? (
+            <span>
+              = <strong className="text-foreground">{((currentTotal / price) * 100).toFixed(1)}%</strong> des Kaufpreises
+              <span className="block text-[10px] text-muted-foreground/80 mt-0.5">
+                Gesamtinvestition: {formatCurrency(price + currentTotal)}
+              </span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground/80">Summe aller Erwerbsnebenkosten</span>
+          )}
+        </div>
+      </div>
+
+      {/* Ausklappbare Detailaufteilung */}
+      {expanded && (
+        <div className="p-3 bg-secondary/30 rounded-xl space-y-3 border border-border/60 text-xs">
+          <div className="flex items-center justify-between pb-1 border-b border-border/40">
+            <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+              <Calculator className="h-3.5 w-3.5 text-primary" /> Aufteilung nach Kostenarten
+            </span>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              Summe: <strong className="text-foreground">{formatCurrency(detailedSum)}</strong>
+            </span>
+          </div>
+
+          {/* 1. Grunderwerbsteuer */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] font-medium text-foreground">
+                1. Grunderwerbsteuer (Finanzamt)
+              </Label>
+              {price > 0 && pTax > 0 && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {((pTax / price) * 100).toFixed(1)}%
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="z.B. 13200"
+                className="h-8 text-xs font-mono"
+                value={form.propertyTransferTax}
+                onChange={(e) => updateDetailedField("propertyTransferTax", e.target.value)}
+              />
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[10px] text-muted-foreground mr-0.5">Presets:</span>
+                {[
+                  { label: "3,5% (BY)", val: 3.5 },
+                  { label: "5,0% (BW)", val: 5.0 },
+                  { label: "6,0% (HE/B)", val: 6.0 },
+                  { label: "6,5% (NRW)", val: 6.5 },
+                ].map((item) => (
+                  <Button
+                    key={item.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-1.5 text-[10px] bg-background hover:bg-muted"
+                    onClick={() => applyPercentToField("propertyTransferTax", item.val)}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Notarkosten */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] font-medium text-foreground">
+                2. Notarkosten (Kaufvertragsbeurkundung)
+              </Label>
+              {price > 0 && notary > 0 && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {((notary / price) * 100).toFixed(2)}%
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="z.B. 3300"
+                className="h-8 text-xs font-mono"
+                value={form.notaryCosts}
+                onChange={(e) => updateDetailedField("notaryCosts", e.target.value)}
+              />
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-[10px] bg-background hover:bg-muted"
+                  onClick={() => applyPercentToField("notaryCosts", 1.5)}
+                >
+                  ~1,5% Standard
+                </Button>
+                <span className="text-[10px] text-muted-foreground">Kaufvertragsbeurkundung</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Grundbuchamt */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] font-medium text-foreground">
+                3. Grundbuchamt (Eigentumsumschreibung)
+              </Label>
+              {price > 0 && landReg > 0 && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {((landReg / price) * 100).toFixed(2)}%
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="z.B. 1100"
+                className="h-8 text-xs font-mono"
+                value={form.landRegisterCosts}
+                onChange={(e) => updateDetailedField("landRegisterCosts", e.target.value)}
+              />
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-[10px] bg-background hover:bg-muted"
+                  onClick={() => applyPercentToField("landRegisterCosts", 0.5)}
+                >
+                  ~0,5% Standard
+                </Button>
+                <span className="text-[10px] text-muted-foreground">Auflassung & Eigentum</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Maklerprovision */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] font-medium text-foreground">
+                4. Maklerprovision (Courtage)
+              </Label>
+              {price > 0 && broker > 0 && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {((broker / price) * 100).toFixed(2)}%
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="z.B. 7854"
+                className="h-8 text-xs font-mono"
+                value={form.brokerCosts}
+                onChange={(e) => updateDetailedField("brokerCosts", e.target.value)}
+              />
+              <div className="flex items-center gap-1 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px] bg-background hover:bg-muted"
+                  onClick={() => updateDetailedField("brokerCosts", "0")}
+                >
+                  0 € (Frei)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px] bg-background hover:bg-muted"
+                  onClick={() => applyPercentToField("brokerCosts", 3.57)}
+                >
+                  3,57% (Hälfte)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-1.5 text-[10px] bg-background hover:bg-muted"
+                  onClick={() => applyPercentToField("brokerCosts", 7.14)}
+                >
+                  7,14% (Voll)
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Sonstige Nebenkosten */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] font-medium text-foreground">
+                5. Sonstige Nebenkosten
+              </Label>
+              <span className="text-[10px] text-muted-foreground">Gutachter, Bewertung, etc.</span>
+            </div>
+            <Input
+              type="number"
+              step="0.01"
+              placeholder="z.B. 500"
+              className="h-8 text-xs font-mono"
+              value={form.otherAncillaryCosts}
+              onChange={(e) => updateDetailedField("otherAncillaryCosts", e.target.value)}
+            />
+          </div>
+
+          {/* Status-Footer der Details */}
+          <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[11px]">
+            <div className="text-muted-foreground">
+              Einzelpositionen addiert: <strong className="text-foreground font-mono">{formatCurrency(detailedSum)}</strong>
+            </div>
+            {Math.abs(detailedSum - currentTotal) < 0.01 && detailedSum > 0 ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                <Check className="h-3.5 w-3.5" /> Summe synchron
+              </span>
+            ) : detailedSum > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px] text-primary"
+                onClick={() => setForm((prev: any) => ({ ...prev, ancillaryCosts: detailedSum.toString() }))}
+              >
+                Als Summe übernehmen
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Wohnung bearbeiten Dialog ────────────────────────────────────────────────
 function EditPropertyDialog({
   property,
@@ -93,10 +437,6 @@ function EditPropertyDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showAncillaryCalc, setShowAncillaryCalc] = useState(false);
-  const [taxRate, setTaxRate] = useState("6.0");
-  const [notaryRate, setNotaryRate] = useState("2.0");
-  const [brokerRate, setBrokerRate] = useState("0.0");
 
   const [form, setForm] = useState({
     name: property.name,
@@ -108,26 +448,15 @@ function EditPropertyDialog({
     purchasedAt: property.purchasedAt ? property.purchasedAt.split("T")[0] : "",
     possessionAt: property.possessionAt ? property.possessionAt.split("T")[0] : "",
     ancillaryCosts: property.ancillaryCosts ? property.ancillaryCosts.toString() : "",
+    propertyTransferTax: property.propertyTransferTax ? property.propertyTransferTax.toString() : "",
+    notaryCosts: property.notaryCosts ? property.notaryCosts.toString() : "",
+    landRegisterCosts: property.landRegisterCosts ? property.landRegisterCosts.toString() : "",
+    brokerCosts: property.brokerCosts ? property.brokerCosts.toString() : "",
+    otherAncillaryCosts: property.otherAncillaryCosts ? property.otherAncillaryCosts.toString() : "",
     buildingSharePercent: property.buildingSharePercent != null ? property.buildingSharePercent.toString() : "80",
     nonRecoverableCosts: property.nonRecoverableCosts != null ? property.nonRecoverableCosts.toString() : "",
     maintenanceReserve: property.maintenanceReserve != null ? property.maintenanceReserve.toString() : "",
   });
-
-  const handleCalcAncillary = () => {
-    const price = parseFloat(form.purchasePrice);
-    if (!isNaN(price) && price > 0) {
-      const tax = parseFloat(taxRate) || 0;
-      const not = parseFloat(notaryRate) || 0;
-      const brok = parseFloat(brokerRate) || 0;
-      const totalPct = tax + not + brok;
-      const calculated = Math.round(price * (totalPct / 100));
-      setForm((prev) => ({ ...prev, ancillaryCosts: calculated.toString() }));
-      toast({
-        title: "Kaufnebenkosten berechnet",
-        description: `${totalPct.toFixed(2)}% von ${formatCurrency(price)} = ${formatCurrency(calculated)}`,
-      });
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,7 +551,7 @@ function EditPropertyDialog({
             <h4 className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
               <Coins className="h-3.5 w-3.5" /> Kaufpreis & Investition (optional)
             </h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Kaufpreis (€)</Label>
                 <Input
@@ -234,50 +563,31 @@ function EditPropertyDialog({
                 />
               </div>
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Kaufnebenkosten (€)</Label>
-                  <button
-                    type="button"
-                    onClick={() => setShowAncillaryCalc(!showAncillaryCalc)}
-                    className="text-[11px] text-primary hover:underline flex items-center gap-1"
-                  >
-                    <Calculator className="h-3 w-3" /> {showAncillaryCalc ? "Rechner zu" : "%-Rechner"}
-                  </button>
-                </div>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="z.B. 23500"
-                  value={form.ancillaryCosts}
-                  onChange={(e) => setForm({ ...form, ancillaryCosts: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1">
-                  <Calendar className="h-3 w-3 text-muted-foreground" /> Kaufvertrag (Notar)
+                  <Calendar className="h-3 w-3 text-muted-foreground" /> Notarvertrag
                 </Label>
                 <Input
                   type="date"
                   value={form.purchasedAt}
                   onChange={(e) => setForm({ ...form, purchasedAt: e.target.value })}
                 />
-                <p className="text-[10px] text-muted-foreground">Datum der Beurkundung</p>
+                <p className="text-[10px] text-muted-foreground">Datum Beurkundung</p>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1">
-                  <Clock className="h-3 w-3 text-primary" /> Nutzen- & Lastenwechsel
+                  <Clock className="h-3 w-3 text-primary" /> Nutzen & Lasten
                 </Label>
                 <Input
                   type="date"
                   value={form.possessionAt}
                   onChange={(e) => setForm({ ...form, possessionAt: e.target.value })}
                 />
-                <p className="text-[10px] text-muted-foreground">Wirtschaftlicher Übergang (Rechte/Miete)</p>
+                <p className="text-[10px] text-muted-foreground">Wirtschaftl. Übergang</p>
               </div>
             </div>
+
+            {/* Detaillierte Kaufnebenkosten */}
+            <DetailedAncillaryCostsSection form={form} setForm={setForm} />
 
             {/* Gebäudeanteil & 15%-Grenzen Berechnung */}
             <div className="space-y-2 pt-2 border-t border-border/40">
@@ -325,60 +635,6 @@ function EditPropertyDialog({
                 </div>
               )}
             </div>
-
-            {/* Optionaler Nebenkosten-Prozent-Rechner */}
-            {showAncillaryCalc && (
-              <div className="p-3 bg-secondary/40 rounded-xl space-y-2 border border-border/60 animate-fade-in text-xs">
-                <p className="font-semibold text-foreground">Schnellrechner Kaufnebenkosten:</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Grunderwerbsteuer (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="h-8 text-xs"
-                      value={taxRate}
-                      onChange={(e) => setTaxRate(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Notar & Grundbuch (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="h-8 text-xs"
-                      value={notaryRate}
-                      onChange={(e) => setNotaryRate(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Makler (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="h-8 text-xs"
-                      value={brokerRate}
-                      onChange={(e) => setBrokerRate(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-muted-foreground text-[11px]">
-                    Gesamt: {((parseFloat(taxRate) || 0) + (parseFloat(notaryRate) || 0) + (parseFloat(brokerRate) || 0)).toFixed(2)}%
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={handleCalcAncillary}
-                    disabled={!form.purchasePrice}
-                  >
-                    Betrag berechnen & übernehmen
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Laufende Kosten & Rücklagen für Cashflow-Berechnung */}
@@ -1139,9 +1395,50 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
               </span>
             </div>
             {ancillary > 0 && (
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>+ Kaufnebenkosten:</span>
-                <span className="font-mono">{formatCurrency(ancillary)} (Gesamt: {formatCurrency(totalInvestment)})</span>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>+ Kaufnebenkosten:</span>
+                  <span className="font-mono font-medium text-foreground">
+                    {formatCurrency(ancillary)}{" "}
+                    <span className="text-muted-foreground font-normal text-[10px]">
+                      (Gesamt: {formatCurrency(totalInvestment)})
+                    </span>
+                  </span>
+                </div>
+                {(Boolean(property.propertyTransferTax || property.notaryCosts || property.landRegisterCosts || property.brokerCosts || property.otherAncillaryCosts)) && (
+                  <div className="pl-2 border-l-2 border-primary/40 text-[10px] text-muted-foreground space-y-0.5 pt-0.5">
+                    {property.propertyTransferTax ? (
+                      <div className="flex justify-between">
+                        <span>• Grunderwerbsteuer:</span>
+                        <span className="font-mono text-foreground">{formatCurrency(property.propertyTransferTax)}</span>
+                      </div>
+                    ) : null}
+                    {property.notaryCosts ? (
+                      <div className="flex justify-between">
+                        <span>• Notarkosten:</span>
+                        <span className="font-mono text-foreground">{formatCurrency(property.notaryCosts)}</span>
+                      </div>
+                    ) : null}
+                    {property.landRegisterCosts ? (
+                      <div className="flex justify-between">
+                        <span>• Grundbuchamt:</span>
+                        <span className="font-mono text-foreground">{formatCurrency(property.landRegisterCosts)}</span>
+                      </div>
+                    ) : null}
+                    {property.brokerCosts ? (
+                      <div className="flex justify-between">
+                        <span>• Maklerprovision:</span>
+                        <span className="font-mono text-foreground">{formatCurrency(property.brokerCosts)}</span>
+                      </div>
+                    ) : null}
+                    {property.otherAncillaryCosts ? (
+                      <div className="flex justify-between">
+                        <span>• Sonstige Nebenkosten:</span>
+                        <span className="font-mono text-foreground">{formatCurrency(property.otherAncillaryCosts)}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
               </div>
             )}
             {grossYield && (
@@ -1522,10 +1819,6 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
 function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
   const [open, setOpen] = useState(false);
   const [withTenant, setWithTenant] = useState(false);
-  const [showAncillaryCalc, setShowAncillaryCalc] = useState(false);
-  const [taxRate, setTaxRate] = useState("6.0");
-  const [notaryRate, setNotaryRate] = useState("2.0");
-  const [brokerRate, setBrokerRate] = useState("0.0");
   const [saving, setSaving] = useState(false);
   const today = new Date().toISOString().split("T")[0];
 
@@ -1540,6 +1833,11 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
     purchasedAt: "",
     possessionAt: "",
     ancillaryCosts: "",
+    propertyTransferTax: "",
+    notaryCosts: "",
+    landRegisterCosts: "",
+    brokerCosts: "",
+    otherAncillaryCosts: "",
     buildingSharePercent: "80",
     nonRecoverableCosts: "",
     maintenanceReserve: "",
@@ -1557,22 +1855,6 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
     tenantContractStart: "",
   });
 
-  const handleCalcAncillary = () => {
-    const price = parseFloat(form.purchasePrice);
-    if (!isNaN(price) && price > 0) {
-      const tax = parseFloat(taxRate) || 0;
-      const not = parseFloat(notaryRate) || 0;
-      const brok = parseFloat(brokerRate) || 0;
-      const totalPct = tax + not + brok;
-      const calculated = Math.round(price * (totalPct / 100));
-      setForm((prev) => ({ ...prev, ancillaryCosts: calculated.toString() }));
-      toast({
-        title: "Kaufnebenkosten berechnet",
-        description: `${totalPct.toFixed(2)}% von ${formatCurrency(price)} = ${formatCurrency(calculated)}`,
-      });
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -1587,6 +1869,11 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
       purchasedAt: form.purchasedAt || null,
       possessionAt: form.possessionAt || null,
       ancillaryCosts: form.ancillaryCosts ? parseFloat(form.ancillaryCosts) : null,
+      propertyTransferTax: form.propertyTransferTax ? parseFloat(form.propertyTransferTax) : null,
+      notaryCosts: form.notaryCosts ? parseFloat(form.notaryCosts) : null,
+      landRegisterCosts: form.landRegisterCosts ? parseFloat(form.landRegisterCosts) : null,
+      brokerCosts: form.brokerCosts ? parseFloat(form.brokerCosts) : null,
+      otherAncillaryCosts: form.otherAncillaryCosts ? parseFloat(form.otherAncillaryCosts) : null,
       buildingSharePercent: form.buildingSharePercent ? parseFloat(form.buildingSharePercent) : 80,
       nonRecoverableCosts: form.nonRecoverableCosts ? parseFloat(form.nonRecoverableCosts) : null,
       maintenanceReserve: form.maintenanceReserve ? parseFloat(form.maintenanceReserve) : null,
@@ -1633,6 +1920,12 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
         purchasedAt: "",
         possessionAt: "",
         ancillaryCosts: "",
+        propertyTransferTax: "",
+        notaryCosts: "",
+        landRegisterCosts: "",
+        brokerCosts: "",
+        otherAncillaryCosts: "",
+        buildingSharePercent: "80",
         nonRecoverableCosts: "",
         maintenanceReserve: "",
         tenantFirstName: "",
@@ -1735,7 +2028,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
             <h4 className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
               <Coins className="h-3.5 w-3.5" /> Kaufpreis & Investition (optional)
             </h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Kaufpreis (€)</Label>
                 <Input
@@ -1747,50 +2040,31 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 />
               </div>
               <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">Kaufnebenkosten (€)</Label>
-                  <button
-                    type="button"
-                    onClick={() => setShowAncillaryCalc(!showAncillaryCalc)}
-                    className="text-[11px] text-primary hover:underline flex items-center gap-1"
-                  >
-                    <Calculator className="h-3 w-3" /> {showAncillaryCalc ? "Rechner zu" : "%-Rechner"}
-                  </button>
-                </div>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="z.B. 25000"
-                  value={form.ancillaryCosts}
-                  onChange={(e) => setForm({ ...form, ancillaryCosts: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1">
-                  <Calendar className="h-3 w-3 text-muted-foreground" /> Kaufvertrag (Notar)
+                  <Calendar className="h-3 w-3 text-muted-foreground" /> Notarvertrag
                 </Label>
                 <Input
                   type="date"
                   value={form.purchasedAt}
                   onChange={(e) => setForm({ ...form, purchasedAt: e.target.value })}
                 />
-                <p className="text-[10px] text-muted-foreground">Datum der Beurkundung</p>
+                <p className="text-[10px] text-muted-foreground">Datum Beurkundung</p>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1">
-                  <Clock className="h-3 w-3 text-primary" /> Nutzen- & Lastenwechsel
+                  <Clock className="h-3 w-3 text-primary" /> Nutzen & Lasten
                 </Label>
                 <Input
                   type="date"
                   value={form.possessionAt}
                   onChange={(e) => setForm({ ...form, possessionAt: e.target.value })}
                 />
-                <p className="text-[10px] text-muted-foreground">Wirtschaftlicher Übergang (Rechte/Miete)</p>
+                <p className="text-[10px] text-muted-foreground">Wirtschaftl. Übergang</p>
               </div>
             </div>
+
+            {/* Detaillierte Kaufnebenkosten */}
+            <DetailedAncillaryCostsSection form={form} setForm={setForm} />
 
             {/* Gebäudeanteil & 15%-Grenzen Berechnung */}
             <div className="space-y-2 pt-2 border-t border-border/40">
@@ -1838,60 +2112,6 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 </div>
               )}
             </div>
-
-            {/* Optionaler Nebenkosten-Prozent-Rechner */}
-            {showAncillaryCalc && (
-              <div className="p-3 bg-secondary/40 rounded-xl space-y-2 border border-border/60 animate-fade-in text-xs">
-                <p className="font-semibold text-foreground">Schnellrechner Kaufnebenkosten:</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Grunderwerbsteuer (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="h-8 text-xs"
-                      value={taxRate}
-                      onChange={(e) => setTaxRate(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Notar & Grundbuch (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="h-8 text-xs"
-                      value={notaryRate}
-                      onChange={(e) => setNotaryRate(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] text-muted-foreground">Makler (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      className="h-8 text-xs"
-                      value={brokerRate}
-                      onChange={(e) => setBrokerRate(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-muted-foreground text-[11px]">
-                    Gesamt: {((parseFloat(taxRate) || 0) + (parseFloat(notaryRate) || 0) + (parseFloat(brokerRate) || 0)).toFixed(2)}%
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={handleCalcAncillary}
-                    disabled={!form.purchasePrice}
-                  >
-                    Betrag berechnen & übernehmen
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Laufende Kosten & Rücklagen für Cashflow-Berechnung */}
@@ -2121,6 +2341,13 @@ function PortfolioKaufwertInfoDialog({
     ? Math.round(totalPurchaseValue / totalSqm)
     : null;
 
+  const totalTransferTax = properties.reduce((s, p) => s + (p.propertyTransferTax || 0), 0);
+  const totalNotaryCosts = properties.reduce((s, p) => s + (p.notaryCosts || 0), 0);
+  const totalLandRegCosts = properties.reduce((s, p) => s + (p.landRegisterCosts || 0), 0);
+  const totalBrokerCosts = properties.reduce((s, p) => s + (p.brokerCosts || 0), 0);
+  const totalOtherAncillary = properties.reduce((s, p) => s + (p.otherAncillaryCosts || 0), 0);
+  const totalDetailedAncillary = totalTransferTax + totalNotaryCosts + totalLandRegCosts + totalBrokerCosts + totalOtherAncillary;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -2185,6 +2412,75 @@ function PortfolioKaufwertInfoDialog({
               </span>
             </div>
           </div>
+
+          {/* Aufschlüsselung der Kaufnebenkosten im Portfolio */}
+          {totalDetailedAncillary > 0 && (
+            <div className="p-4 rounded-lg bg-secondary/30 border space-y-3">
+              <div className="font-semibold text-foreground text-sm flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Receipt className="h-4 w-4 text-primary" />
+                  Aufschlüsselung der Kaufnebenkosten im Portfolio
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  Erfasst: <strong className="text-foreground">{formatCurrency(totalDetailedAncillary)}</strong>
+                  {totalAncillaryCosts > 0 && ` von ${formatCurrency(totalAncillaryCosts)}`}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-xs">
+                <div className="p-2.5 rounded-md bg-card border">
+                  <span className="text-[10px] text-muted-foreground block">Grunderwerbsteuer</span>
+                  <span className="font-mono font-semibold text-foreground block mt-0.5">
+                    {formatCurrency(totalTransferTax)}
+                  </span>
+                  {totalPurchaseValue > 0 && totalTransferTax > 0 && (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {((totalTransferTax / totalPurchaseValue) * 100).toFixed(1)}% v. Kaufwert
+                    </span>
+                  )}
+                </div>
+                <div className="p-2.5 rounded-md bg-card border">
+                  <span className="text-[10px] text-muted-foreground block">Notarkosten</span>
+                  <span className="font-mono font-semibold text-foreground block mt-0.5">
+                    {formatCurrency(totalNotaryCosts)}
+                  </span>
+                  {totalPurchaseValue > 0 && totalNotaryCosts > 0 && (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {((totalNotaryCosts / totalPurchaseValue) * 100).toFixed(2)}% v. Kaufwert
+                    </span>
+                  )}
+                </div>
+                <div className="p-2.5 rounded-md bg-card border">
+                  <span className="text-[10px] text-muted-foreground block">Grundbuchamt</span>
+                  <span className="font-mono font-semibold text-foreground block mt-0.5">
+                    {formatCurrency(totalLandRegCosts)}
+                  </span>
+                  {totalPurchaseValue > 0 && totalLandRegCosts > 0 && (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {((totalLandRegCosts / totalPurchaseValue) * 100).toFixed(2)}% v. Kaufwert
+                    </span>
+                  )}
+                </div>
+                <div className="p-2.5 rounded-md bg-card border">
+                  <span className="text-[10px] text-muted-foreground block">Maklerprovision</span>
+                  <span className="font-mono font-semibold text-foreground block mt-0.5">
+                    {formatCurrency(totalBrokerCosts)}
+                  </span>
+                  {totalPurchaseValue > 0 && totalBrokerCosts > 0 && (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {((totalBrokerCosts / totalPurchaseValue) * 100).toFixed(2)}% v. Kaufwert
+                    </span>
+                  )}
+                </div>
+                <div className="p-2.5 rounded-md bg-card border col-span-2 sm:col-span-1">
+                  <span className="text-[10px] text-muted-foreground block">Sonstige Nebenkosten</span>
+                  <span className="font-mono font-semibold text-foreground block mt-0.5">
+                    {formatCurrency(totalOtherAncillary)}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Gutachten etc.</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Formel-Erklärung */}
           <div className="p-4 rounded-lg bg-muted/50 border space-y-2 text-xs">
@@ -2254,8 +2550,23 @@ function PortfolioKaufwertInfoDialog({
                             <span className="text-muted-foreground italic text-[11px]">Nicht hinterlegt</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground">
-                          {anc > 0 ? formatCurrency(anc) : "–"}
+                        <TableCell className="text-xs text-right">
+                          {anc > 0 ? (
+                            <div>
+                              <span className="font-mono font-medium">{formatCurrency(anc)}</span>
+                              {(p.propertyTransferTax || p.notaryCosts || p.landRegisterCosts || p.brokerCosts || p.otherAncillaryCosts) ? (
+                                <div className="text-[9px] text-muted-foreground space-y-0.5 mt-0.5 font-mono">
+                                  {p.propertyTransferTax ? <div>GrESt: {formatCurrency(p.propertyTransferTax)}</div> : null}
+                                  {p.notaryCosts ? <div>Notar: {formatCurrency(p.notaryCosts)}</div> : null}
+                                  {p.landRegisterCosts ? <div>Grundbuch: {formatCurrency(p.landRegisterCosts)}</div> : null}
+                                  {p.brokerCosts ? <div>Makler: {formatCurrency(p.brokerCosts)}</div> : null}
+                                  {p.otherAncillaryCosts ? <div>Sonst.: {formatCurrency(p.otherAncillaryCosts)}</div> : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">–</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs text-right">
                           {cold > 0 ? formatCurrency(cold) : <span className="text-muted-foreground italic">Leerstand</span>}
