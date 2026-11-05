@@ -85,7 +85,7 @@ function LoginForm() {
                 <Input
                   id="username"
                   type="text"
-                  placeholder="z.B. maurimic"
+                  placeholder="Benutzername eingeben"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="pl-9 h-10 text-sm"
@@ -107,7 +107,7 @@ function LoginForm() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Ihr Passwort"
+                  placeholder="Passwort eingeben"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-9 pr-10 h-10 font-mono text-sm"
