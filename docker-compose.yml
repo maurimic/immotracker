@@ -13,6 +13,7 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/data/immotracker.db
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - APP_USERNAME=${APP_USERNAME:-admin}
       - APP_PASSWORD=${APP_PASSWORD:-}
       - GOOGLE_SERVICE_ACCOUNT_JSON=${GOOGLE_SERVICE_ACCOUNT_JSON:-}
       - GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/app/secrets/google-service-account.json

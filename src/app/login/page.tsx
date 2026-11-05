@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Building2, Lock, ArrowRight, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react";
+import { Building2, Lock, User, ArrowRight, Eye, EyeOff, ShieldCheck, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const from = searchParams.get("from") || "/";
 
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) return;
+    if (!username || !password) return;
 
     setLoading(true);
     setError(null);
@@ -29,7 +30,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
 
       const data = await res.json();
@@ -38,7 +39,7 @@ function LoginForm() {
         // Erfolgreich eingeloggt -> Weiterleiten
         window.location.href = from;
       } else {
-        setError(data.error || "Falsches Passwort. Bitte erneut versuchen.");
+        setError(data.error || "Zugangsdaten nicht korrekt. Bitte erneut versuchen.");
       }
     } catch {
       setError("Verbindungsfehler zum Server. Bitte versuchen Sie es erneut.");
@@ -62,7 +63,7 @@ function LoginForm() {
               Immobilienverwaltung
             </p>
             <CardDescription className="text-xs text-muted-foreground mt-2">
-              Geschützter Bereich. Bitte geben Sie Ihr Passwort ein, um auf das Portfolio-Dashboard zuzugreifen.
+              Geschützter Bereich. Bitte melden Sie sich mit Ihren Zugangsdaten an.
             </CardDescription>
           </div>
         </CardHeader>
@@ -77,6 +78,25 @@ function LoginForm() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
+              <Label htmlFor="username" className="text-xs font-medium">
+                Benutzername
+              </Label>
+              <div className="relative">
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="z.B. maurimic"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="pl-9 h-10 text-sm"
+                  autoFocus
+                  required
+                />
+                <User className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="password" className="text-xs font-medium flex items-center justify-between">
                 <span>Passwort</span>
                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
@@ -87,13 +107,13 @@ function LoginForm() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Ihr Administrator-Passwort"
+                  placeholder="Ihr Passwort"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pr-10 h-10 font-mono text-sm"
-                  autoFocus
+                  className="pl-9 pr-10 h-10 font-mono text-sm"
                   required
                 />
+                <Lock className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
@@ -113,7 +133,7 @@ function LoginForm() {
             <Button
               type="submit"
               className="w-full h-10 gap-2 font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-indigo-500/20"
-              disabled={loading || !password}
+              disabled={loading || !username || !password}
             >
               {loading ? (
                 <span>Wird überprüft...</span>

@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 const SESSION_COOKIE_NAME = "immo_session";
 const SESSION_SALT = process.env.NEXTAUTH_SECRET || "immotracker-session-salt-default-key-32";
 
-async function hashSessionToken(password: string): Promise<string> {
+async function hashSessionToken(username: string, password: string): Promise<string> {
   const enc = new TextEncoder();
-  const data = enc.encode(`${password}:${SESSION_SALT}`);
+  const data = enc.encode(`${username.trim().toLowerCase()}:${password}:${SESSION_SALT}`);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -14,7 +14,8 @@ async function hashSessionToken(password: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    const { password } = await request.json();
+    const { username, password } = await request.json();
+    const appUsername = (process.env.APP_USERNAME || process.env.ADMIN_USERNAME || "admin").trim();
     const appPassword = process.env.APP_PASSWORD || process.env.ADMIN_PASSWORD;
 
     if (!appPassword) {
@@ -24,14 +25,21 @@ export async function POST(request: Request) {
       );
     }
 
-    if (password !== appPassword) {
+    if (!username || username.trim().toLowerCase() !== appUsername.toLowerCase()) {
+      return NextResponse.json(
+        { error: "Der eingegebene Benutzername ist nicht korrekt." },
+        { status: 401 }
+      );
+    }
+
+    if (!password || password !== appPassword) {
       return NextResponse.json(
         { error: "Das eingegebene Passwort ist nicht korrekt." },
         { status: 401 }
       );
     }
 
-    const token = await hashSessionToken(appPassword);
+    const token = await hashSessionToken(appUsername, appPassword);
     const response = NextResponse.json({ success: true });
 
     // Cookie für 30 Tage setzen
