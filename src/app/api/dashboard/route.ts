@@ -420,5 +420,11 @@ export async function GET() {
     historicCashflow: historicPayments
       .reverse()
       .map((p) => ({ period: p.period, amount: p._sum.amount || 0 })),
+  }, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
   });
 }

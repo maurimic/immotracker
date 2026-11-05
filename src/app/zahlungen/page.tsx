@@ -1744,7 +1744,10 @@ function ZahlungenContent() {
 
   const fetchAccountBalance = async () => {
     try {
-      const res = await fetch("/api/kontostand");
+      const res = await fetch(`/api/kontostand?t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.success && typeof data.amount === "number") {
