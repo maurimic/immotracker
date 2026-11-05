@@ -20,19 +20,27 @@ export async function GET() {
         date: live.date.toISOString(),
         formattedDate: live.formattedDate,
       };
-      await prisma.appSetting.upsert({
-        where: { key: "latest_account_balance" },
-        create: {
-          key: "latest_account_balance",
-          value: JSON.stringify(data),
-        },
-        update: {
-          value: JSON.stringify(data),
-        },
-      });
+
+      // Best-effort Cache-Update in DB (darf die Rückgabe der Live-Daten niemals verhindern)
+      try {
+        await prisma.appSetting.upsert({
+          where: { key: "latest_account_balance" },
+          create: {
+            key: "latest_account_balance",
+            value: JSON.stringify(data),
+          },
+          update: {
+            value: JSON.stringify(data),
+          },
+        });
+      } catch (dbErr) {
+        console.warn("Warnung: Konnte Kontostand nicht in appSetting schreiben:", dbErr);
+      }
+
       return NextResponse.json({ success: true, ...data }, { headers: noCacheHeaders });
     }
   } catch (err) {
+    console.warn("Fehler beim Live-Abruf des Kontostands aus Google Sheets:", err);
     const cached = await prisma.appSetting.findUnique({
       where: { key: "latest_account_balance" },
     });

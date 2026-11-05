@@ -139,7 +139,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // ─── Google Sheets Verbindungs-Modal & Sync ─────────────────────────────────
-function GoogleSheetsDialog({ onSyncComplete }: { onSyncComplete: () => void }) {
+function GoogleSheetsDialog({ onSyncComplete }: { onSyncComplete: (balance?: any) => void }) {
   const [open, setOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState<any>(null);
@@ -175,7 +175,7 @@ function GoogleSheetsDialog({ onSyncComplete }: { onSyncComplete: () => void }) 
           title: "Google Sheets synchronisiert",
           description: `${data.imported} neu importiert, ${data.skipped} bereits vorhanden, ${data.matched} zugeordnet.`,
         });
-        onSyncComplete();
+        onSyncComplete(data.accountBalance);
         fetchStatus();
       } else {
         toast({ title: "Fehler beim Sync", description: data.error, variant: "destructive" });
@@ -2195,7 +2195,7 @@ function ZahlungenContent() {
           <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); fetchAccountBalance(); }} />
 
           {/* Google Sheets Sync & Status */}
-          <GoogleSheetsDialog onSyncComplete={() => { fetchPayments(); fetchAccountBalance(); }} />
+          <GoogleSheetsDialog onSyncComplete={(newBal) => { fetchPayments(); if (newBal) setAccountBalance(newBal); else fetchAccountBalance(); }} />
 
           {/* Optionaler manueller CSV Import */}
           <CsvUploadDialog onUploaded={() => { fetchPayments(); fetchAccountBalance(); }} />
