@@ -13,15 +13,18 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=file:/data/immotracker.db
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - APP_PASSWORD=${APP_PASSWORD:-}
       - GOOGLE_SERVICE_ACCOUNT_JSON=${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      - GOOGLE_SERVICE_ACCOUNT_KEY_PATH=/app/secrets/google-service-account.json
       - GOOGLE_SPREADSHEET_ID=${GOOGLE_SPREADSHEET_ID:-}
-      - GOOGLE_SHEET_NAME=${GOOGLE_SHEET_NAME:-Kontoumsätze}
+      - GOOGLE_SHEET_NAME=${GOOGLE_SHEET_NAME:-Kontobewegung}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
     volumes:
       - immo-data:/data
       - immo-uploads:/app/public/uploads
       - immo-backups:/backups
+      - ./secrets:/app/secrets:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 30s

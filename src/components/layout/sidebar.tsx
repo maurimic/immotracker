@@ -19,6 +19,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,10 @@ export function Sidebar() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  if (pathname === "/login") {
+    return null;
+  }
 
   return (
     <aside
@@ -170,6 +175,21 @@ export function Sidebar() {
             )}
           </button>
         )}
+
+        <button
+          onClick={async () => {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+          }}
+          className={cn(
+            "sidebar-item w-full text-muted-foreground hover:text-destructive transition-colors",
+            collapsed && "justify-center px-2"
+          )}
+          title="Abmelden"
+        >
+          <LogOut className="h-4 w-4 flex-shrink-0" />
+          {!collapsed && <span>Abmelden</span>}
+        </button>
 
         <button
           onClick={() => setCollapsed(!collapsed)}
