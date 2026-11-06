@@ -325,16 +325,22 @@ export async function testGoogleSheetsConnection() {
     process.env.GOOGLE_SPREADSHEET_ID ||
     "1GslK8LFx_Day6hjEcQnEY_nmX06KuJwRRdqVr1ph8HU";
   const sheetName = process.env.GOOGLE_SHEET_NAME || "Kontobewegung";
+  const balanceSheetName = process.env.GOOGLE_BALANCE_SHEET_NAME || "Kontostand";
   const { email } = getGoogleCredentials();
 
-  const transactions = await fetchSheetTransactions();
+  const [transactions, latestBalance] = await Promise.all([
+    fetchSheetTransactions().catch(() => []),
+    fetchLatestAccountBalance().catch(() => null),
+  ]);
 
   return {
     success: true,
     spreadsheetId,
     sheetName,
+    balanceSheetName,
     serviceAccountEmail: email,
     rowCount: transactions.length,
+    latestBalance,
     sampleRows: transactions.slice(0, 5),
   };
 }

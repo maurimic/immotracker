@@ -126,8 +126,25 @@ export async function POST() {
     imported++;
   }
 
+  // Vorherigen Kontostand aus DB laden für exakten Vergleich
+  let previousBalance: { amount: number; date: string; formattedDate: string } | null = null;
+  try {
+    const prevSetting = await prisma.appSetting.findUnique({
+      where: { key: "latest_account_balance" },
+    });
+    if (prevSetting?.value) {
+      previousBalance = JSON.parse(prevSetting.value);
+    }
+  } catch (e) {
+    // ignore
+  }
+
   // Kontostand aus Tabellenblatt "Kontostand" aktualisieren & cachen
-  let latestBalance = null;
+  let latestBalance: { amount: number; date: string; formattedDate: string } | null = null;
+  let balanceUpdated = false;
+  let amountChanged = false;
+  let dateChanged = false;
+
   try {
     const bal = await fetchLatestAccountBalance();
     if (bal) {
@@ -136,16 +153,25 @@ export async function POST() {
         date: bal.date.toISOString(),
         formattedDate: bal.formattedDate,
       };
-      await prisma.appSetting.upsert({
-        where: { key: "latest_account_balance" },
-        create: {
-          key: "latest_account_balance",
-          value: JSON.stringify(latestBalance),
-        },
-        update: {
-          value: JSON.stringify(latestBalance),
-        },
-      });
+
+      amountChanged = !previousBalance || previousBalance.amount !== latestBalance.amount;
+      dateChanged = !previousBalance || previousBalance.formattedDate !== latestBalance.formattedDate;
+      balanceUpdated = amountChanged || dateChanged;
+
+      try {
+        await prisma.appSetting.upsert({
+          where: { key: "latest_account_balance" },
+          create: {
+            key: "latest_account_balance",
+            value: JSON.stringify(latestBalance),
+          },
+          update: {
+            value: JSON.stringify(latestBalance),
+          },
+        });
+      } catch (dbErr) {
+        console.warn("Warnung beim Cachen des Kontostands in der DB:", dbErr);
+      }
     }
   } catch (err) {
     console.warn("Fehler beim Abruf des Kontostands aus Google Sheets:", err);
@@ -159,6 +185,10 @@ export async function POST() {
     aiUsed,
     total: rows.length,
     accountBalance: latestBalance,
+    balanceUpdated,
+    amountChanged,
+    dateChanged,
+    previousBalance,
   });
 }
 

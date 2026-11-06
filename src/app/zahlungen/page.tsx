@@ -139,7 +139,13 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 // ─── Google Sheets Verbindungs-Modal & Sync ─────────────────────────────────
-function GoogleSheetsDialog({ onSyncComplete }: { onSyncComplete: (balance?: any) => void }) {
+function GoogleSheetsDialog({
+  onSyncComplete,
+  currentBalance,
+}: {
+  onSyncComplete: (balance?: any) => void;
+  currentBalance?: { amount: number; formattedDate: string } | null;
+}) {
   const [open, setOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState<any>(null);
@@ -171,9 +177,38 @@ function GoogleSheetsDialog({ onSyncComplete }: { onSyncComplete: (balance?: any
       const data = await res.json();
       setSyncing(false);
       if (res.ok) {
+        const balAmount = data.accountBalance?.amount;
+        const balDate = data.accountBalance?.formattedDate;
+        const balStr = typeof balAmount === "number" ? formatCurrency(balAmount) : null;
+
+        let title = "Google Sheets synchronisiert";
+        let desc = "";
+
+        if (data.balanceUpdated && balStr) {
+          if (data.amountChanged) {
+            title = "Kontostand & Saldo aktualisiert";
+            desc = `Neuer Kontostand: ${balStr} (Stand: ${balDate}). `;
+          } else {
+            title = "Neuer Kontostand-Stand";
+            desc = `Kontostand bestätigt: ${balStr} (Aktualisierter Stand: ${balDate}). `;
+          }
+
+          if (data.imported > 0) {
+            desc += `${data.imported} neue Bankbuchung(en) importiert.`;
+          } else {
+            desc += `Keine neuen Bankumsätze (${data.skipped} Buchungen unverändert).`;
+          }
+        } else if (data.imported > 0) {
+          title = "Neue Bankumsätze importiert";
+          desc = `${data.imported} neue Buchung(en) importiert (${data.matched} zugeordnet). Kontostand: ${balStr || "–"} (Stand: ${balDate || "–"}).`;
+        } else {
+          title = "Google Sheets synchronisiert";
+          desc = `Alles auf dem neuesten Stand (${balStr || "–"}, Stand: ${balDate || "–"}). Keine neuen Bankumsätze.`;
+        }
+
         toast({
-          title: "Google Sheets synchronisiert",
-          description: `${data.imported} neu importiert, ${data.skipped} bereits vorhanden, ${data.matched} zugeordnet.`,
+          title,
+          description: desc,
         });
         onSyncComplete(data.accountBalance);
         fetchStatus();
@@ -248,8 +283,8 @@ function GoogleSheetsDialog({ onSyncComplete }: { onSyncComplete: (balance?: any
             </div>
             <div className="flex justify-between items-center">
               <div>
-                <span className="text-muted-foreground font-sans font-medium block">Tabellenblatt:</span>
-                <span className="font-semibold text-foreground">Kontobewegung</span>
+                <span className="text-muted-foreground font-sans font-medium block">Umsätze (Tabellenblatt):</span>
+                <span className="font-semibold text-foreground">{status?.sheetName || "Kontobewegung"}</span>
               </div>
               {status?.rowCount !== undefined && (
                 <div className="text-right">
@@ -257,6 +292,23 @@ function GoogleSheetsDialog({ onSyncComplete }: { onSyncComplete: (balance?: any
                   <Badge variant="secondary" className="font-mono text-xs">
                     {status.rowCount} Buchungen
                   </Badge>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-border/40">
+              <div>
+                <span className="text-muted-foreground font-sans font-medium block">Kontostand (Tabellenblatt):</span>
+                <span className="font-semibold text-foreground">{status?.balanceSheetName || "Kontostand"}</span>
+              </div>
+              {(currentBalance || status?.latestBalance) && (
+                <div className="text-right">
+                  <span className="text-muted-foreground font-sans font-medium block">Aktueller Saldo:</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400 font-sans">
+                    {formatCurrency(currentBalance?.amount ?? status?.latestBalance?.amount ?? 0)}{" "}
+                    <span className="text-[10px] text-muted-foreground font-normal">
+                      (Stand: {currentBalance?.formattedDate ?? status?.latestBalance?.formattedDate})
+                    </span>
+                  </span>
                 </div>
               )}
             </div>
@@ -2195,7 +2247,7 @@ function ZahlungenContent() {
           <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); fetchAccountBalance(); }} />
 
           {/* Google Sheets Sync & Status */}
-          <GoogleSheetsDialog onSyncComplete={(newBal) => { fetchPayments(); if (newBal) setAccountBalance(newBal); else fetchAccountBalance(); }} />
+          <GoogleSheetsDialog currentBalance={accountBalance} onSyncComplete={(newBal) => { fetchPayments(); if (newBal) setAccountBalance(newBal); else fetchAccountBalance(); }} />
 
           {/* Optionaler manueller CSV Import */}
           <CsvUploadDialog onUploaded={() => { fetchPayments(); fetchAccountBalance(); }} />
