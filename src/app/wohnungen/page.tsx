@@ -7,7 +7,7 @@ import {
   Phone, Mail, Calendar, CreditCard, Edit, Trash2, X, TrendingUp,
   AlertCircle, ShieldCheck, Clock, Calculator, Upload, Check,
   UserPlus, UserMinus, AlertTriangle, Home, Coins, Percent, ArrowUpRight, ArrowRight, Info,
-  Hammer, ShieldAlert, ChevronDown, ChevronUp, Receipt
+  Hammer, ShieldAlert, ChevronDown, ChevronUp, Receipt, History, Archive
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ interface Tenant {
   email?: string;
   phone?: string;
   iban?: string;
+  isCurrent?: boolean;
   coldRent: number;
   utilities: number;
   deposit: number;
@@ -73,6 +74,8 @@ interface Property {
   nonRecoverableCosts?: number | null;
   maintenanceReserve?: number | null;
   tenant: Tenant | null;
+  formerTenants?: Tenant[];
+  tenants?: Tenant[];
   loans: Array<{ id: string; originalAmount: number; currentBalance: number }>;
   tickets: Array<{ id: string; status: string; priority: string }>;
   rentAdjustments: RentAdjustment[];
@@ -970,10 +973,214 @@ function AddTenantDialog({
   );
 }
 
-// ─── Mieter bearbeiten Dialog ────────────────────────────────────────────────
-function EditTenantDialog({ tenant, onRefresh }: { tenant: Tenant; onRefresh: () => void }) {
+// ─── Vormieter hinzufügen Dialog (Historischer Mieter) ────────────────────────
+function AddFormerTenantDialog({
+  property,
+  onRefresh,
+  trigger,
+}: {
+  property: Property;
+  onRefresh: () => void;
+  trigger?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    iban: "",
+    coldRent: "",
+    utilities: "",
+    deposit: "",
+    depositPaid: true,
+    moveInDate: "",
+    moveOutDate: "",
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const res = await fetch("/api/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        propertyId: property.id,
+        isCurrent: false,
+        ...form,
+        coldRent: parseFloat(form.coldRent || "0"),
+        utilities: parseFloat(form.utilities || "0"),
+        deposit: parseFloat(form.deposit || "0"),
+        contractStart: form.moveInDate || null,
+        moveInDate: form.moveInDate || null,
+        moveOutDate: form.moveOutDate || null,
+      }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      toast({ title: `Vormieter für ${property.name} erfolgreich angelegt!` });
+      setOpen(false);
+      onRefresh();
+    } else {
+      const err = await res.json();
+      toast({
+        title: "Fehler beim Anlegen des Vormieters",
+        description: err.error || "Bitte Eingaben prüfen",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger || (
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-dashed text-muted-foreground hover:text-foreground">
+            <History className="h-3 w-3 text-amber-500" /> + Vormieter erfassen
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <History className="h-5 w-5 text-amber-500" />
+            Vormieter erfassen für {property.name}
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Erfassen Sie einen ehemaligen Mieter, um historische Mietzahlungen und Bankbuchungen automatisch zuzuordnen und auszuwerten.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Vorname *</Label>
+              <Input
+                placeholder="Max"
+                value={form.firstName}
+                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Nachname *</Label>
+              <Input
+                placeholder="Mustermann"
+                value={form.lastName}
+                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <Label className="text-xs">IBAN (für automatische Überweisungs-Zuordnung)</Label>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">Sehr empfohlen</span>
+            </div>
+            <Input
+              className="font-mono text-xs uppercase"
+              placeholder="DE89 3704 0044 0532 0130 00"
+              value={form.iban}
+              onChange={(e) => setForm({ ...form, iban: e.target.value })}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Wird genutzt, um historische Bankbuchungen automatisch mit diesem Vormieter und dieser Wohnung zu verknüpfen.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Damalige Kaltmiete (€/Monat) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="650.00"
+                value={form.coldRent}
+                onChange={(e) => setForm({ ...form, coldRent: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">NK-Vorauszahlung (€/Monat) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="130.00"
+                value={form.utilities}
+                onChange={(e) => setForm({ ...form, utilities: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Mietbeginn / Einzug</Label>
+              <Input
+                type="date"
+                value={form.moveInDate}
+                onChange={(e) => setForm({ ...form, moveInDate: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Mietende / Auszug</Label>
+              <Input
+                type="date"
+                value={form.moveOutDate}
+                onChange={(e) => setForm({ ...form, moveOutDate: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">E-Mail (optional)</Label>
+              <Input
+                type="email"
+                placeholder="max@beispiel.de"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Telefon (optional)</Label>
+              <Input
+                placeholder="+49 170 1234567"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3">
+            <Button variant="outline" type="button" onClick={() => setOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Wird gespeichert..." : "Vormieter anlegen"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Mieter bearbeiten Dialog ────────────────────────────────────────────────
+function EditTenantDialog({
+  tenant,
+  onRefresh,
+  trigger,
+}: {
+  tenant: Tenant;
+  onRefresh: () => void;
+  trigger?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const isFormer = tenant.isCurrent === false;
   const [form, setForm] = useState({
     firstName: tenant.firstName,
     lastName: tenant.lastName,
@@ -1007,7 +1214,7 @@ function EditTenantDialog({ tenant, onRefresh }: { tenant: Tenant; onRefresh: ()
     });
     setSaving(false);
     if (res.ok) {
-      toast({ title: "Mieterdaten erfolgreich aktualisiert" });
+      toast({ title: isFormer ? "Vormieterdaten erfolgreich aktualisiert" : "Mieterdaten erfolgreich aktualisiert" });
       setOpen(false);
       onRefresh();
     } else {
@@ -1018,13 +1225,27 @@ function EditTenantDialog({ tenant, onRefresh }: { tenant: Tenant; onRefresh: ()
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
-          <Edit className="h-3 w-3" /> Mieter bearbeiten
-        </Button>
+        {trigger || (
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+            <Edit className="h-3 w-3" /> {isFormer ? "Vormieter bearbeiten" : "Mieter bearbeiten"}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Mieterakte: {tenant.firstName} {tenant.lastName}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {isFormer ? (
+              <>
+                <History className="h-4 w-4 text-amber-500" />
+                <span>Vormieterakte: {tenant.firstName} {tenant.lastName}</span>
+              </>
+            ) : (
+              <>
+                <Users className="h-4 w-4 text-primary" />
+                <span>Mieterakte: {tenant.firstName} {tenant.lastName}</span>
+              </>
+            )}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3 pt-2">
           <div className="grid grid-cols-2 gap-3">
@@ -1103,74 +1324,192 @@ function EditTenantDialog({ tenant, onRefresh }: { tenant: Tenant; onRefresh: ()
   );
 }
 
-// ─── Mieter entfernen Dialog (Kündigung/Auszug) ──────────────────────────────
+// ─── Mieter entfernen / Auszug Dialog (Kündigung/Auszug) ──────────────────────
 function RemoveTenantDialog({
   tenant,
   propertyName,
   onRefresh,
+  trigger,
 }: {
   tenant: Tenant;
   propertyName: string;
   onRefresh: () => void;
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [moveOutDate, setMoveOutDate] = useState(
+    tenant.moveOutDate ? tenant.moveOutDate.split("T")[0] : new Date().toISOString().split("T")[0]
+  );
+  const [confirmHardDelete, setConfirmHardDelete] = useState(false);
 
-  const handleRemove = async () => {
-    setDeleting(true);
-    const res = await fetch(`/api/tenants/${tenant.id}`, {
-      method: "DELETE",
-    });
-    setDeleting(false);
+  const isFormer = tenant.isCurrent === false;
+
+  const handleArchive = async () => {
+    setLoading(true);
+    const res = await fetch(
+      `/api/tenants/${tenant.id}?action=archive&moveOutDate=${encodeURIComponent(moveOutDate)}`,
+      { method: "DELETE" }
+    );
+    setLoading(false);
     if (res.ok) {
       toast({
-        title: `Mieter ${tenant.firstName} ${tenant.lastName} wurde entfernt`,
-        description: `Wohnung '${propertyName}' ist nun wieder als Leerstand markiert.`,
+        title: `Auszug erfasst: ${tenant.firstName} ${tenant.lastName}`,
+        description: `Wohnung '${propertyName}' ist nun als Leerstand markiert. Mieter wurde als Vormieter archiviert.`,
       });
       setOpen(false);
       onRefresh();
     } else {
-      toast({ title: "Fehler beim Entfernen des Mieters", variant: "destructive" });
+      toast({ title: "Fehler beim Erfassen des Auszugs", variant: "destructive" });
+    }
+  };
+
+  const handleHardDelete = async () => {
+    setLoading(true);
+    const res = await fetch(`/api/tenants/${tenant.id}`, {
+      method: "DELETE",
+    });
+    setLoading(false);
+    if (res.ok) {
+      toast({
+        title: `Mieter ${tenant.firstName} ${tenant.lastName} wurde gelöscht`,
+      });
+      setOpen(false);
+      onRefresh();
+    } else {
+      toast({ title: "Fehler beim Löschen des Mieters", variant: "destructive" });
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 gap-1"
-          title="Mietverhältnis beenden / Mieter entfernen"
-        >
-          <UserMinus className="h-3 w-3" /> Auszug / Entfernen
-        </Button>
+        {trigger || (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 gap-1"
+            title="Mietverhältnis beenden / Mieter entfernen"
+          >
+            <UserMinus className="h-3 w-3" /> Auszug / Entfernen
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-destructive">
-            <AlertTriangle className="h-5 w-5" />
-            Mietverhältnis beenden / Mieter entfernen?
+          <DialogTitle className="flex items-center gap-2">
+            {isFormer ? (
+              <>
+                <Trash2 className="h-5 w-5 text-destructive" />
+                <span>Vormieter löschen</span>
+              </>
+            ) : (
+              <>
+                <UserMinus className="h-5 w-5 text-amber-500" />
+                <span>Mietverhältnis beenden / Auszug</span>
+              </>
+            )}
           </DialogTitle>
+          <DialogDescription className="text-xs">
+            {tenant.firstName} {tenant.lastName} – {propertyName}
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-2 text-sm text-muted-foreground">
-          <p>
-            Möchten Sie das Mietverhältnis von{" "}
-            <strong className="text-foreground">{tenant.firstName} {tenant.lastName}</strong> in der Wohnung{" "}
-            <strong className="text-foreground">{propertyName}</strong> beenden?
-          </p>
-          <p className="text-xs bg-secondary/50 p-3 rounded-lg">
-            ℹ️ Die Wohnung wird anschließend wieder als <strong>Leerstand</strong> geführt. Historische Zahlungen bleiben im System erhalten.
-          </p>
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={deleting}>
-            Abbrechen
-          </Button>
-          <Button variant="destructive" onClick={handleRemove} disabled={deleting}>
-            {deleting ? "Wird entfernt..." : "Mieter entfernen (Auszug)"}
-          </Button>
-        </DialogFooter>
+
+        {isFormer ? (
+          <div className="space-y-3 py-2 text-sm text-muted-foreground">
+            <p>
+              Möchten Sie den Vormieter <strong className="text-foreground">{tenant.firstName} {tenant.lastName}</strong> unwiderruflich aus der Datenbank entfernen?
+            </p>
+            <p className="text-xs bg-destructive/10 text-destructive p-3 rounded-lg border border-destructive/20">
+              ⚠️ Zugeordnete historische Bankzahlungen bleiben erhalten, werden jedoch vom Mieter entkoppelt.
+            </p>
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+                Abbrechen
+              </Button>
+              <Button variant="destructive" onClick={handleHardDelete} disabled={loading}>
+                {loading ? "Wird gelöscht..." : "Vormieter endgültig löschen"}
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-4 py-2">
+            {/* Option 1: Archivieren als Vormieter (Empfohlen) */}
+            <div className="border border-border/80 bg-secondary/30 rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center gap-2">
+                <Archive className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-semibold text-xs text-foreground">
+                  Als Vormieter archivieren (Auszug)
+                </span>
+                <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30 px-1 py-0 ml-auto">
+                  Empfohlen
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Die Wohnung wird wieder als <strong>Leerstand</strong> geführt. Der Mieter bleibt mit allen Bankbuchungen in der <strong>Mieter-Historie</strong> dieser Wohnung erhalten.
+              </p>
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Auszugsdatum / Mietvertragsende</Label>
+                <Input
+                  type="date"
+                  value={moveOutDate}
+                  onChange={(e) => setMoveOutDate(e.target.value)}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <Button
+                className="w-full h-8 text-xs gap-1.5 shadow-sm"
+                onClick={handleArchive}
+                disabled={loading}
+              >
+                <Archive className="h-3.5 w-3.5" />
+                {loading ? "Wird archiviert..." : "Auszug bestätigen & als Vormieter archivieren"}
+              </Button>
+            </div>
+
+            {/* Option 2: Hard Delete */}
+            <div className="pt-1">
+              {!confirmHardDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmHardDelete(true)}
+                  className="text-xs text-muted-foreground hover:text-destructive underline flex items-center gap-1 transition-colors"
+                >
+                  <Trash2 className="h-3 w-3" /> Mieter unwiderruflich löschen (z.B. bei Fehleingabe)...
+                </button>
+              ) : (
+                <div className="border border-destructive/30 bg-destructive/5 rounded-xl p-3 space-y-2 text-xs">
+                  <p className="font-semibold text-destructive flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Mieter komplett aus der Datenbank löschen?
+                  </p>
+                  <p className="text-muted-foreground">
+                    Verwenden Sie dies nur, wenn der Mieter irrtümlich angelegt wurde.
+                  </p>
+                  <div className="flex gap-2 justify-end pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setConfirmHardDelete(false)}
+                    >
+                      Abbrechen
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={handleHardDelete}
+                      disabled={loading}
+                    >
+                      {loading ? "Wird gelöscht..." : "Endgültig löschen"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1755,6 +2094,102 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
               </p>
               <AddTenantDialog property={property} onRefresh={onRefresh} />
             </div>
+          </div>
+        )}
+
+        {/* Mieter-Historie / Vormieter Sektion */}
+        {property.formerTenants && property.formerTenants.length > 0 ? (
+          <div className="border-t border-border/50 pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold flex items-center gap-1.5 text-muted-foreground">
+                <History className="h-3.5 w-3.5 text-amber-500" />
+                Vormieter-Historie ({property.formerTenants.length})
+              </span>
+              <AddFormerTenantDialog property={property} onRefresh={onRefresh} />
+            </div>
+
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {property.formerTenants.map((ft) => (
+                <div
+                  key={ft.id}
+                  className="bg-secondary/40 border border-border/60 rounded-lg p-2.5 text-xs space-y-1.5"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <span className="font-semibold text-foreground truncate">
+                        {ft.firstName} {ft.lastName}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30 px-1 py-0 h-4"
+                      >
+                        Vormieter
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Link
+                        href={`/zahlungen?search=${encodeURIComponent(ft.lastName)}&period=ALL`}
+                        className="h-6 px-1.5 text-[11px] gap-1 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded inline-flex items-center transition-colors font-medium shadow-xs"
+                        title={`Bankbuchungen & Mieten für ${ft.firstName} ${ft.lastName} ansehen`}
+                      >
+                        <CreditCard className="h-3 w-3" />
+                        <span>Zahlungen</span>
+                      </Link>
+                      <EditTenantDialog
+                        tenant={ft}
+                        onRefresh={onRefresh}
+                        trigger={
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                            title="Vormieter bearbeiten"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        }
+                      />
+                      <RemoveTenantDialog
+                        tenant={ft}
+                        propertyName={property.name}
+                        onRefresh={onRefresh}
+                        trigger={
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            title="Vormieter löschen"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                    <span>
+                      {ft.moveInDate ? formatDate(ft.moveInDate) : "–"} bis{" "}
+                      {ft.moveOutDate ? formatDate(ft.moveOutDate) : "–"}
+                    </span>
+                    <span className="font-mono">
+                      {formatCurrency(ft.coldRent + ft.utilities)} ({formatCurrency(ft.coldRent)} KM + {formatCurrency(ft.utilities)} NK)
+                    </span>
+                  </div>
+
+                  {ft.iban && (
+                    <div className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground truncate">
+                      <CreditCard className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate" title={ft.iban}>{ft.iban}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="border-t border-border/40 pt-2 flex justify-end">
+            <AddFormerTenantDialog property={property} onRefresh={onRefresh} />
           </div>
         )}
 

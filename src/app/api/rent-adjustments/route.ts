@@ -14,7 +14,9 @@ export async function GET(req: Request) {
             id: true,
             name: true,
             address: true,
-            tenant: {
+            tenants: {
+              where: { isCurrent: true },
+              take: 1,
               select: {
                 id: true,
                 firstName: true,
@@ -29,7 +31,15 @@ export async function GET(req: Request) {
       orderBy: { effectiveDate: "desc" },
     });
 
-    return NextResponse.json(adjustments);
+    const mapped = adjustments.map((adj) => ({
+      ...adj,
+      property: {
+        ...adj.property,
+        tenant: adj.property.tenants?.[0] || null,
+      },
+    }));
+
+    return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Fehler beim Abrufen der Mietanpassungen:", error);
     return NextResponse.json(
@@ -88,7 +98,10 @@ export async function POST(req: Request) {
           select: {
             id: true,
             name: true,
-            tenant: true,
+            tenants: {
+              where: { isCurrent: true },
+              take: 1,
+            },
           },
         },
       },
@@ -98,8 +111,8 @@ export async function POST(req: Request) {
     // aktualisieren wir auch direkt die Stammdaten des aktuellen Mieters:
     const now = new Date();
     if (effectiveDate <= now && (newColdRent !== null || newUtilities !== null)) {
-      const tenant = await prisma.tenant.findUnique({
-        where: { propertyId: body.propertyId },
+      const tenant = await prisma.tenant.findFirst({
+        where: { propertyId: body.propertyId, isCurrent: true },
       });
       if (tenant) {
         await prisma.tenant.update({
@@ -112,7 +125,15 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json(adjustment, { status: 201 });
+    const resAdjustment = {
+      ...adjustment,
+      property: {
+        ...adjustment.property,
+        tenant: adjustment.property.tenants?.[0] || null,
+      },
+    };
+
+    return NextResponse.json(resAdjustment, { status: 201 });
   } catch (error: any) {
     console.error("Fehler beim Erstellen der Mietanpassung:", error);
     return NextResponse.json(

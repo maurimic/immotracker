@@ -10,7 +10,9 @@ export async function GET(
   const property = await prisma.property.findUnique({
     where: { id: params.id },
     include: {
-      tenant: true,
+      tenants: {
+        orderBy: [{ isCurrent: "desc" }, { moveOutDate: "desc" }, { createdAt: "desc" }],
+      },
       loans: { include: { amortizations: { orderBy: { period: "desc" }, take: 12 } } },
       tickets: { orderBy: { reportedAt: "desc" } },
       meterReadings: { orderBy: { readingDate: "desc" }, take: 10 },
@@ -24,7 +26,10 @@ export async function GET(
     return NextResponse.json({ error: "Nicht gefunden" }, { status: 404 });
   }
 
-  return NextResponse.json(property);
+  const activeTenant = property.tenants?.find((t) => t.isCurrent) || null;
+  const formerTenants = property.tenants?.filter((t) => !t.isCurrent) || [];
+
+  return NextResponse.json({ ...property, tenant: activeTenant, formerTenants });
 }
 
 export async function PUT(
@@ -78,7 +83,9 @@ export async function PUT(
         maintenanceReserve: body.maintenanceReserve !== undefined ? (body.maintenanceReserve !== "" && !isNaN(parseFloat(body.maintenanceReserve)) ? parseFloat(body.maintenanceReserve) : null) : undefined,
       },
       include: {
-        tenant: true,
+        tenants: {
+          orderBy: [{ isCurrent: "desc" }, { moveOutDate: "desc" }],
+        },
         loans: true,
         tickets: true,
         rentAdjustments: true,
@@ -86,7 +93,11 @@ export async function PUT(
         investments: { orderBy: { date: "desc" } },
       },
     });
-    return NextResponse.json(property);
+
+    const activeTenant = property.tenants?.find((t) => t.isCurrent) || null;
+    const formerTenants = property.tenants?.filter((t) => !t.isCurrent) || [];
+
+    return NextResponse.json({ ...property, tenant: activeTenant, formerTenants });
   } catch (error: any) {
     console.error("Fehler beim Aktualisieren der Wohnung:", error);
     return NextResponse.json(
@@ -111,20 +122,21 @@ export async function DELETE(
     const propertyId = params.id;
 
     await prisma.$transaction(async (tx) => {
-      // 1. Find tenant if any
-      const tenant = await tx.tenant.findUnique({
+      // 1. Find tenants of this property if any
+      const tenants = await tx.tenant.findMany({
         where: { propertyId },
         select: { id: true },
       });
 
-      if (tenant) {
-        // Delete payments linked to this tenant
+      const tenantIds = tenants.map((t) => t.id);
+      if (tenantIds.length > 0) {
+        // Delete payments linked to these tenants
         await tx.payment.deleteMany({
-          where: { tenantId: tenant.id },
+          where: { tenantId: { in: tenantIds } },
         });
-        // Delete tenant
-        await tx.tenant.delete({
-          where: { id: tenant.id },
+        // Delete tenants
+        await tx.tenant.deleteMany({
+          where: { id: { in: tenantIds } },
         });
       }
 

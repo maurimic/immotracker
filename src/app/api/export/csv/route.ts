@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 
   if (type === "properties") {
     const props = await prisma.property.findMany({
-      include: { tenant: true },
+      include: { tenants: { orderBy: [{ isCurrent: "desc" }] } },
       orderBy: { name: "asc" },
     });
 
@@ -31,30 +31,33 @@ export async function GET(request: Request) {
       "Kaution bezahlt", "Einzugsdatum", "Vertragsbeginn"
     ];
 
-    const rows = props.map((p) => [
-      escapeCsv(p.id),
-      escapeCsv(p.name),
-      escapeCsv(p.address),
-      escapeCsv(p.sqm),
-      escapeCsv(p.rooms || ""),
-      escapeCsv(p.floor || ""),
-      escapeCsv(p.purchasePrice || ""),
-      escapeCsv(p.ancillaryCosts || ""),
-      escapeCsv(p.purchasedAt ? p.purchasedAt.toISOString().slice(0, 10) : ""),
-      escapeCsv(p.possessionAt ? p.possessionAt.toISOString().slice(0, 10) : ""),
-      escapeCsv(p.tenant?.firstName || ""),
-      escapeCsv(p.tenant?.lastName || ""),
-      escapeCsv(p.tenant?.email || ""),
-      escapeCsv(p.tenant?.phone || ""),
-      escapeCsv(p.tenant?.iban || ""),
-      escapeCsv(p.tenant?.coldRent ?? ""),
-      escapeCsv(p.tenant?.utilities ?? ""),
-      escapeCsv(p.tenant ? (p.tenant.coldRent + p.tenant.utilities) : ""),
-      escapeCsv(p.tenant?.deposit ?? ""),
-      escapeCsv(p.tenant?.depositPaid ? "JA" : "NEIN"),
-      escapeCsv(p.tenant?.moveInDate ? p.tenant.moveInDate.toISOString().slice(0, 10) : ""),
-      escapeCsv(p.tenant?.contractStart ? p.tenant.contractStart.toISOString().slice(0, 10) : ""),
-    ].join(";"));
+    const rows = props.map((p) => {
+      const activeTenant = p.tenants?.find((t) => t.isCurrent);
+      return [
+        escapeCsv(p.id),
+        escapeCsv(p.name),
+        escapeCsv(p.address),
+        escapeCsv(p.sqm),
+        escapeCsv(p.rooms || ""),
+        escapeCsv(p.floor || ""),
+        escapeCsv(p.purchasePrice || ""),
+        escapeCsv(p.ancillaryCosts || ""),
+        escapeCsv(p.purchasedAt ? p.purchasedAt.toISOString().slice(0, 10) : ""),
+        escapeCsv(p.possessionAt ? p.possessionAt.toISOString().slice(0, 10) : ""),
+        escapeCsv(activeTenant?.firstName || ""),
+        escapeCsv(activeTenant?.lastName || ""),
+        escapeCsv(activeTenant?.email || ""),
+        escapeCsv(activeTenant?.phone || ""),
+        escapeCsv(activeTenant?.iban || ""),
+        escapeCsv(activeTenant?.coldRent ?? ""),
+        escapeCsv(activeTenant?.utilities ?? ""),
+        escapeCsv(activeTenant ? (activeTenant.coldRent + activeTenant.utilities) : ""),
+        escapeCsv(activeTenant?.deposit ?? ""),
+        escapeCsv(activeTenant?.depositPaid ? "JA" : "NEIN"),
+        escapeCsv(activeTenant?.moveInDate ? activeTenant.moveInDate.toISOString().slice(0, 10) : ""),
+        escapeCsv(activeTenant?.contractStart ? activeTenant.contractStart.toISOString().slice(0, 10) : ""),
+      ].join(";");
+    });
 
     csvContent = [headers.join(";"), ...rows].join("\r\n");
   } else if (type === "payments") {

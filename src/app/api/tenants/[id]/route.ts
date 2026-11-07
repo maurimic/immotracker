@@ -27,6 +27,7 @@ export async function PUT(
         email: body.email !== undefined ? body.email : undefined,
         phone: body.phone !== undefined ? body.phone : undefined,
         iban: body.iban !== undefined ? body.iban : undefined,
+        isCurrent: body.isCurrent !== undefined ? Boolean(body.isCurrent) : undefined,
         coldRent: body.coldRent !== undefined ? parseFloat(body.coldRent) : undefined,
         utilities: body.utilities !== undefined ? parseFloat(body.utilities) : undefined,
         deposit: body.deposit !== undefined ? parseFloat(body.deposit) : undefined,
@@ -60,6 +61,22 @@ export async function DELETE(
 ) {
   try {
     const tenantId = params.id;
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get("action");
+
+    if (action === "archive") {
+      const moveOutDateStr = searchParams.get("moveOutDate");
+      const moveOutDate = moveOutDateStr ? new Date(moveOutDateStr) : new Date();
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          isCurrent: false,
+          moveOutDate,
+        },
+      });
+      return NextResponse.json({ success: true, archived: true });
+    }
+
     // Unlink payments so transaction history remains intact without foreign key block
     await prisma.payment.updateMany({
       where: { tenantId },

@@ -70,6 +70,20 @@ export async function ensureSchema() {
         CONSTRAINT "property_investments_propertyId_fkey" FOREIGN KEY ("propertyId") REFERENCES "properties" ("id") ON DELETE CASCADE ON UPDATE CASCADE
       );
     `);
+
+    // Tenants: isCurrent & propertyId multi-tenant support (Vormieter)
+    const tenantCols = (await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info(tenants)`)) || [];
+    const tenantColNames = new Set(tenantCols.map((c) => c.name));
+
+    if (!tenantColNames.has("isCurrent")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "tenants" ADD COLUMN "isCurrent" BOOLEAN NOT NULL DEFAULT 1;`
+      );
+    }
+
+    // Drop unique index on propertyId so apartments can have former & current tenants
+    await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "tenants_propertyId_key";`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "tenants_propertyId_idx" ON "tenants"("propertyId");`);
   } catch (err) {
     console.warn("Schema auto-ensure notice:", err);
   }

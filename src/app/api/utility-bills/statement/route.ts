@@ -11,7 +11,7 @@ export async function POST(request: Request) {
 
   const [properties, bills] = await Promise.all([
     prisma.property.findMany({
-      include: { tenant: true },
+      include: { tenants: true },
     }),
     prisma.utilityBill.findMany({
       where: { period, isAllocatable: true },
@@ -34,7 +34,8 @@ export async function POST(request: Request) {
   const statements = [];
 
   for (const property of properties) {
-    if (!property.tenant) continue;
+    const activeTenant = property.tenants?.find((t) => t.isCurrent);
+    if (!activeTenant) continue;
 
     const share = property.sqm / totalSqm;
     const propertyShare = totalAllocatableCosts * share;
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     // Vorauszahlungen berechnen
     const prepayments = await prisma.payment.aggregate({
       where: {
-        tenantId: property.tenant.id,
+        tenantId: activeTenant.id,
         period: { startsWith: period },
         category: "RENT",
       },
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     });
 
     // Nur NK-VZ (Vorauszahlung), nicht Kaltmiete
-    const monthlyNKVZ = property.tenant.utilities;
+    const monthlyNKVZ = activeTenant.utilities;
     const annualPrepayments = monthlyNKVZ * 12;
     const balance = annualPrepayments - propertyShare;
 
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
 
     statements.push({
       property: property.name,
-      tenant: `${property.tenant.firstName} ${property.tenant.lastName}`,
+      tenant: `${activeTenant.firstName} ${activeTenant.lastName}`,
       sqm: property.sqm,
       share: (share * 100).toFixed(2),
       totalCosts: propertyShare,

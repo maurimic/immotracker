@@ -48,10 +48,22 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
+
+  let propertyId = body.propertyId || null;
+  if (body.tenantId && !propertyId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: body.tenantId },
+      select: { propertyId: true },
+    });
+    if (tenant?.propertyId) {
+      propertyId = tenant.propertyId;
+    }
+  }
+
   const payment = await prisma.payment.create({
     data: {
       tenantId: body.tenantId || null,
-      propertyId: body.propertyId || null,
+      propertyId,
       loanId: body.loanId || null,
       bookingDate: new Date(body.bookingDate),
       amount: parseFloat(body.amount),

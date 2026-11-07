@@ -17,7 +17,7 @@ export async function GET() {
         },
       },
     },
-    orderBy: { lastName: "asc" },
+    orderBy: [{ isCurrent: "desc" }, { lastName: "asc" }],
   });
   return NextResponse.json(tenants);
 }
@@ -33,10 +33,12 @@ export async function POST(request: Request) {
       );
     }
 
+    const isCurrentTenant = body.isCurrent !== undefined ? Boolean(body.isCurrent) : true;
+
     // Check if property exists
     const property = await prisma.property.findUnique({
       where: { id: body.propertyId },
-      include: { tenant: true },
+      include: { tenants: true },
     });
 
     if (!property) {
@@ -46,9 +48,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (property.tenant) {
+    const activeTenant = property.tenants?.find((t) => t.isCurrent);
+    if (isCurrentTenant && activeTenant) {
       return NextResponse.json(
-        { error: `Diese Wohnung hat bereits einen aktiven Mieter (${property.tenant.firstName} ${property.tenant.lastName}). Bitte beenden Sie zuerst das bestehende Mietverhältnis.` },
+        { error: `Diese Wohnung hat bereits einen aktiven Mieter (${activeTenant.firstName} ${activeTenant.lastName}). Bitte beenden Sie zuerst das bestehende Mietverhältnis oder legen Sie den Mieter als Vormieter an.` },
         { status: 400 }
       );
     }
@@ -61,9 +64,11 @@ export async function POST(request: Request) {
         email: body.email || null,
         phone: body.phone || null,
         iban: body.iban || null,
+        isCurrent: isCurrentTenant,
         coldRent: parseFloat(body.coldRent || 0),
         utilities: parseFloat(body.utilities || 0),
         deposit: parseFloat(body.deposit || 0),
+        depositPaid: Boolean(body.depositPaid),
         moveInDate: body.moveInDate ? new Date(body.moveInDate) : null,
         contractStart: body.contractStart ? new Date(body.contractStart) : null,
         moveOutDate: body.moveOutDate ? new Date(body.moveOutDate) : null,

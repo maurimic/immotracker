@@ -36,6 +36,17 @@ export async function PATCH(
     updateData.status = "MATCHED";
   }
 
+  // If a tenant is assigned but no property was explicitly provided, auto-link the tenant's property
+  if (updateData.tenantId && !updateData.propertyId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: updateData.tenantId as string },
+      select: { propertyId: true },
+    });
+    if (tenant?.propertyId) {
+      updateData.propertyId = tenant.propertyId;
+    }
+  }
+
   const payment = await prisma.payment.update({
     where: { id },
     data: updateData,

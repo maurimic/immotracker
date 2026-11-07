@@ -39,7 +39,7 @@ import { toast } from "@/hooks/use-toast";
 
 export interface PropertyInvestment {
   id: string;
-  propertyId: string;
+  propertyId?: string;
   title: string;
   description?: string | null;
   amount: number;

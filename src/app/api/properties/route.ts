@@ -4,9 +4,11 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const properties = await prisma.property.findMany({
+  const rawProperties = await prisma.property.findMany({
     include: {
-      tenant: true,
+      tenants: {
+        orderBy: [{ isCurrent: "desc" }, { moveOutDate: "desc" }, { createdAt: "desc" }],
+      },
       loans: true,
       tickets: {
         where: { status: { not: "DONE" } },
@@ -22,6 +24,17 @@ export async function GET() {
     },
     orderBy: { name: "asc" },
   });
+
+  const properties = rawProperties.map((p) => {
+    const activeTenant = p.tenants?.find((t) => t.isCurrent) || null;
+    const formerTenants = p.tenants?.filter((t) => !t.isCurrent) || [];
+    return {
+      ...p,
+      tenant: activeTenant,
+      formerTenants,
+    };
+  });
+
   return NextResponse.json(properties);
 }
 
@@ -91,10 +104,10 @@ export async function POST(request: Request) {
         buildingSharePercent: body.buildingSharePercent !== undefined && body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80,
         nonRecoverableCosts: parseOptFloat(body.nonRecoverableCosts),
         maintenanceReserve: parseOptFloat(body.maintenanceReserve),
-        ...(tenantInput ? { tenant: { create: tenantInput } } : {}),
+        ...(tenantInput ? { tenants: { create: [tenantInput] } } : {}),
       },
       include: {
-        tenant: true,
+        tenants: true,
         loans: true,
         tickets: true,
         rentAdjustments: true,
@@ -103,7 +116,10 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(property, { status: 201 });
+    const activeTenant = property.tenants?.find((t) => t.isCurrent) || null;
+    const formerTenants = property.tenants?.filter((t) => !t.isCurrent) || [];
+
+    return NextResponse.json({ ...property, tenant: activeTenant, formerTenants }, { status: 201 });
   } catch (error: any) {
     console.error("Fehler beim Erstellen der Wohnung:", error);
     return NextResponse.json(

@@ -39,8 +39,8 @@ model Property {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Mietverhältnis
-  tenant      Tenant?
+  // Mietverhältnisse (aktuell & historisch)
+  tenants     Tenant[]
 
   // Module
   loans       Loan[]
@@ -58,7 +58,7 @@ model Property {
 
 model Tenant {
   id            String   @id @default(cuid())
-  propertyId    String   @unique
+  propertyId    String
   property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   firstName     String
@@ -66,6 +66,9 @@ model Tenant {
   email         String?
   phone         String?
   iban          String?  // Für automatisches Matching
+  
+  // Status: Aktueller Mieter vs. Vormieter
+  isCurrent     Boolean  @default(true)
   
   // Mietkonditionen
   coldRent      Float    // Soll-Kaltmiete
@@ -83,6 +86,7 @@ model Tenant {
 
   payments      Payment[]
 
+  @@index([propertyId])
   @@map("tenants")
 }
 

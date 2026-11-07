@@ -31,6 +31,7 @@ interface Tenant {
   coldRent: number;
   utilities: number;
   iban?: string | null;
+  isCurrent?: boolean;
   moveInDate?: string | null;
   moveOutDate?: string | null;
   property: {
@@ -78,6 +79,7 @@ interface Payment {
     id: string;
     firstName: string;
     lastName: string;
+    isCurrent?: boolean;
     coldRent?: number;
     utilities?: number;
     property?: {
@@ -1197,7 +1199,7 @@ function EditPaymentDialog({
                 <SelectItem value="NONE">-- Kein Mieter zugeordnet --</SelectItem>
                 {tenants.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
-                    {t.firstName} {t.lastName} ({t.property?.name || "Wohnung"})
+                    {t.firstName} {t.lastName} {t.isCurrent === false ? "(Vormieter)" : ""} ({t.property?.name || "Wohnung"})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -2038,6 +2040,12 @@ function ZahlungenContent() {
 
       if (tStartM && tStartM > period) return false;
       if (t.moveOutDate && t.moveOutDate.slice(0, 7) < period) return false;
+      if (t.isCurrent === false) {
+        const currentTenantOfProp = tenants.find((ot) => ot.property?.id === t.property?.id && ot.isCurrent);
+        if (currentTenantOfProp?.moveInDate && currentTenantOfProp.moveInDate.slice(0, 7) <= period) {
+          return false;
+        }
+      }
       return true;
     });
 
@@ -3025,9 +3033,16 @@ function ZahlungenContent() {
                               {/* 9. Mieter / Zuordnung */}
                               <TableCell className="text-sm">
                                 {tenant ? (
-                                  <span className="font-medium text-foreground">
-                                    {tenant.firstName} {tenant.lastName}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-medium text-foreground">
+                                      {tenant.firstName} {tenant.lastName}
+                                    </span>
+                                    {tenant.isCurrent === false && (
+                                      <span className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-1 py-0.5 rounded font-medium">
+                                        Vormieter
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : payment.loan || matchedLoan ? (
                                   <div className="flex items-center gap-1 font-medium text-purple-700 dark:text-purple-300 text-xs">
                                     <Landmark className="h-3 w-3 shrink-0" />

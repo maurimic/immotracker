@@ -15,6 +15,9 @@ export interface Tenant {
   propertyId: string;
   coldRent?: number;
   utilities?: number;
+  isCurrent?: boolean;
+  moveInDate?: Date | string | null;
+  moveOutDate?: Date | string | null;
   property?: { id: string; name: string; address: string } | null;
 }
 
@@ -211,14 +214,24 @@ export function ruleBasedMatch(
 
   // 1. IBAN-Matching (exakt)
   if (rowIban) {
-    const match = tenants.find(
+    const matches = tenants.filter(
       (t) => t.iban?.replace(/\s/g, "").toUpperCase() === rowIban
     );
-    if (match) {
+    if (matches.length > 0) {
+      let best = matches[0];
+      if (matches.length > 1) {
+        const rowTime = new Date(row.date).getTime();
+        const dateMatch = matches.find((t) => {
+          const inTime = t.moveInDate ? new Date(t.moveInDate).getTime() : -Infinity;
+          const outTime = t.moveOutDate ? new Date(t.moveOutDate).getTime() : Infinity;
+          return rowTime >= inTime && rowTime <= outTime;
+        });
+        best = dateMatch || matches.find((t) => t.isCurrent) || matches[0];
+      }
       const category = detectPaymentCategory(rowRef, rowName, row.amount);
       return {
-        tenantId: match.id,
-        propertyId: match.propertyId,
+        tenantId: best.id,
+        propertyId: best.propertyId,
         loanId: null,
         method: "IBAN",
         confidence: 1.0,
@@ -397,6 +410,17 @@ export function ruleBasedMatch(
       score = 0.95; // Exakter Name im Verwendungszweck
     } else if (inRefLast) {
       score = 0.80; // Nachname im Verwendungszweck
+    }
+
+    if (score >= 0.80) {
+      const rowTime = new Date(row.date).getTime();
+      const inTime = tenant.moveInDate ? new Date(tenant.moveInDate).getTime() : -Infinity;
+      const outTime = tenant.moveOutDate ? new Date(tenant.moveOutDate).getTime() : Infinity;
+      if (rowTime >= inTime && rowTime <= outTime) {
+        score += 0.05;
+      } else if (tenant.isCurrent) {
+        score += 0.02;
+      }
     }
 
     if (score > (bestTenantMatch?.score || 0)) {

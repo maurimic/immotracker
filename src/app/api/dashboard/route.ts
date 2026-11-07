@@ -12,11 +12,11 @@ export const revalidate = 0;
  * Liefert alle KPIs für das Haupt-Dashboard
  */
 export async function GET() {
-  const [properties, payments, loans, tickets, rentAdjustments, accountBalanceSetting] =
+  const [rawProperties, payments, loans, tickets, rentAdjustments, accountBalanceSetting] =
     await Promise.all([
       prisma.property.findMany({
         include: {
-          tenant: true,
+          tenants: true,
           loans: true,
           rentAdjustments: {
             orderBy: { effectiveDate: "asc" },
@@ -54,6 +54,11 @@ export async function GET() {
         where: { key: "latest_account_balance" },
       }),
     ]);
+
+  const properties = rawProperties.map((p) => ({
+    ...p,
+    tenant: p.tenants?.find((t) => t.isCurrent) || null,
+  }));
 
   // ─── Kredit-KPIs ──────────────────────────────────────────────────────────
 
