@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef, Suspense } from "react";
+import { useEffect, useState, useMemo, useRef, Suspense, Fragment } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   RefreshCw, Plus, Check, AlertCircle, Clock,
   Bot, User, Hash, Euro, Calendar, Filter, Upload, FileText,
   Copy, Printer, Send, FileSpreadsheet, Eye, EyeOff, Building2,
   ExternalLink, Info, CheckCircle2, ArrowDownLeft, ArrowUpRight, Search,
-  Scale, TrendingUp, Landmark, X, Smartphone
+  Scale, TrendingUp, Landmark, X, Smartphone,
+  Split, ChevronDown, ChevronUp, Trash2, Scissors
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,9 @@ interface Payment {
   period?: string | null;
   sheetsRowId?: string | null;
   propertyId?: string | null;
+  tenantId?: string | null;
+  isSplit?: boolean;
+  parentPaymentId?: string | null;
   property?: {
     id: string;
     name: string;
@@ -89,6 +93,8 @@ interface Payment {
       rentAdjustments?: any[];
     } | null;
   } | null;
+  splitPayments?: Payment[];
+  parentPayment?: Payment | null;
 }
 
 interface MonthStatus {
@@ -117,11 +123,13 @@ const METHOD_CONFIG = {
   NAME: { label: "Name", icon: User, color: "secondary" },
   AI: { label: "KI", icon: Bot, color: "warning" },
   MANUAL: { label: "Manuell", icon: User, color: "secondary" },
+  SPLIT: { label: "Split", icon: Split, color: "secondary" },
   UNMATCHED: { label: "Unbekannt", icon: AlertCircle, color: "destructive" },
-} as const;
+};
 
 const CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
   RENT: { label: "Miete", color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300" },
+  DEPOSIT: { label: "Kaution", color: "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300" },
   UTILITY_IN: { label: "Nebenkosten-Abrechnung", color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300" },
   LOAN: { label: "Darlehen / Annuität", color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300" },
   HAUSGELD: { label: "Hausgeld", color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300" },
@@ -137,6 +145,7 @@ const STATUS_COLORS: Record<string, string> = {
   OVERDUE: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800",
   PENDING: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700",
   MATCHED: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+  SPLIT: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800",
   MANUAL_REVIEW: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
 };
 
@@ -400,7 +409,13 @@ function RematchButton({ onRematchComplete }: { onRematchComplete: () => void })
 }
 
 // ─── n8n Comdirect Bank-Sync Buttons (Maurizio & Steven) mit Auto-Sync ──────
-function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void }) {
+function N8nBankSyncButtons({
+  currentBalance,
+  onSyncComplete,
+}: {
+  currentBalance?: { amount: number; date: string; formattedDate: string } | null;
+  onSyncComplete?: (newBalance?: { amount: number; date: string; formattedDate: string } | null) => void;
+}) {
   const [loadingAccount, setLoadingAccount] = useState<"maurizio" | "steven" | null>(null);
   const [autoSyncCountdown, setAutoSyncCountdown] = useState<number | null>(null);
   const [isSyncingSheet, setIsSyncingSheet] = useState(false);
@@ -413,31 +428,69 @@ function N8nBankSyncButtons({ onSyncComplete }: { onSyncComplete?: () => void })
       const res = await fetch("/api/payments/sync", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
+        const balAmount = data.accountBalance?.amount;
+        const balDate = data.accountBalance?.formattedDate;
+        const balStr = typeof balAmount === "number" ? formatCurrency(balAmount) : null;
+
+        // Prüfen, ob Kontostand oder Datum sich geändert haben
+        const dateOrAmountChanged =
+          Boolean(data.balanceUpdated) ||
+          (balDate && currentBalance?.formattedDate && balDate !== currentBalance.formattedDate) ||
+          (typeof balAmount === "number" && currentBalance?.amount !== undefined && balAmount !== currentBalance.amount);
+
+        const todayStr = new Date().toLocaleDateString("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+        const isToday = balDate === todayStr;
+
         if (data.imported > 0) {
           toast({
             title: `Bankbuchungen aktualisiert (${accountName})`,
-            description: `${data.imported} neue Buchung(en) aus Google Sheets eingelesen (${data.matched} automatisch zugeordnet).`,
+            description: `${data.imported} neue Buchung(en) aus Google Sheets eingelesen (${data.matched} zugeordnet). Kontostand: ${balStr || "–"} (Stand: ${balDate || "–"}).`,
           });
-          if (onSyncComplete) onSyncComplete();
+          if (onSyncComplete) onSyncComplete(data.accountBalance);
+          setIsSyncingSheet(false);
+          setAutoSyncCountdown(null);
+          setActiveAccount(null);
+        } else if (dateOrAmountChanged) {
+          // Neuer Kontostand / neues Datum im Google Sheet erkannt!
+          toast({
+            title: `Kontostand aktualisiert (${accountName})`,
+            description: `Neuer Kontostand: ${balStr || "–"} (Stand: ${balDate || "–"}). Keine neuen Bankumsätze.`,
+          });
+          if (onSyncComplete) onSyncComplete(data.accountBalance);
+          setIsSyncingSheet(false);
+          setAutoSyncCountdown(null);
+          setActiveAccount(null);
+        } else if (isToday) {
+          // Kontostand ist bereits tagesaktuell!
+          toast({
+            title: `Google Sheet ist aktuell (${accountName})`,
+            description: `Kontostand ist tagesaktuell: ${balStr || "–"} (Stand: ${balDate}). Keine neuen Bankumsätze (${data.skipped || 0} Buchungen synchron).`,
+          });
+          if (onSyncComplete) onSyncComplete(data.accountBalance);
           setIsSyncingSheet(false);
           setAutoSyncCountdown(null);
           setActiveAccount(null);
         } else if (retryCount < 2) {
           // n8n braucht nach Push-TAN oft 15-30s zum Schreiben ins Sheet.
-          // Falls nach 10s noch keine neue Zeile da ist: automatisch nach 12s nochmals prüfen!
+          // Falls noch weder neue Zeile noch tagesaktueller Kontostand da ist: nach 10s erneut prüfen!
           toast({
             title: `Warte auf Google Sheet (${accountName})...`,
-            description: "Noch keine neue Zeile im Sheet. Prüfe automatisch in wenigen Sekunden erneut...",
+            description: "Noch kein neuer Stand im Sheet eingetroffen. Prüfe automatisch in wenigen Sekunden erneut...",
           });
           setTimeout(() => {
             executeGoogleSheetsSync(account, retryCount + 1);
-          }, 12000);
+          }, 10000);
           return;
         } else {
           toast({
             title: `Google Sheet geprüft (${accountName})`,
-            description: "Keine neuen Zeilen gefunden. Falls die TAN erst später freigegeben wurde, einfach auf 'Google Sheets Sync' klicken.",
+            description: `Aktueller Stand im Sheet: ${balStr || "–"} (Stand: ${balDate || "–"}). Keine neueren Buchungen gefunden.`,
           });
+          if (onSyncComplete) onSyncComplete(data.accountBalance);
           setIsSyncingSheet(false);
           setAutoSyncCountdown(null);
           setActiveAccount(null);
@@ -1324,6 +1377,679 @@ function EditPaymentDialog({
   );
 }
 
+// ─── Split-Buchungen Modal (Buchung aufteilen) ──────────────────────────────
+interface SplitItemState {
+  id: string;
+  amount: string;
+  category: string;
+  tenantId: string;
+  propertyId: string;
+  period: string;
+  reference: string;
+}
+
+function SplitPaymentDialog({
+  payment,
+  tenants,
+  properties,
+  open,
+  onOpenChange,
+  onUpdated,
+}: {
+  payment: Payment;
+  tenants: Tenant[];
+  properties: Array<{ id: string; name: string; address: string }>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onUpdated: () => void;
+}) {
+  const [splits, setSplits] = useState<SplitItemState[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [unsplitLoading, setUnsplitLoading] = useState(false);
+
+  // Initialisieren beim Öffnen
+  useEffect(() => {
+    if (!open) return;
+
+    if (payment.isSplit && payment.splitPayments && payment.splitPayments.length > 0) {
+      // Bestehende Splits laden
+      setSplits(
+        payment.splitPayments.map((sp) => ({
+          id: sp.id || Math.random().toString(36).substring(2, 9),
+          amount: String(sp.amount),
+          category: sp.category || "RENT",
+          tenantId: sp.tenant?.id || "NONE",
+          propertyId: sp.propertyId || sp.property?.id || sp.tenant?.property?.id || "NONE",
+          period: sp.period || (sp.bookingDate ? sp.bookingDate.slice(0, 7) : ""),
+          reference: sp.reference || "",
+        }))
+      );
+    } else {
+      // Neue Aufteilung vorschlagen (Standard: 50 / 50 auf 2 Monate)
+      const basePeriod =
+        payment.period && /^\d{4}-\d{2}$/.test(payment.period)
+          ? payment.period
+          : payment.bookingDate
+          ? payment.bookingDate.slice(0, 7)
+          : currentPeriod();
+
+      const [y, m] = basePeriod.split("-").map(Number);
+      const nextDate = new Date(y, m, 1);
+      const nextPeriod = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+
+      const half = Math.round((payment.amount / 2) * 100) / 100;
+      const rest = Math.round((payment.amount - half) * 100) / 100;
+
+      const initialTenantId = payment.tenant?.id || "NONE";
+      const initialPropId =
+        payment.propertyId || payment.property?.id || payment.tenant?.property?.id || "NONE";
+
+      setSplits([
+        {
+          id: "split-1",
+          amount: half.toFixed(2),
+          category: payment.category || "RENT",
+          tenantId: initialTenantId,
+          propertyId: initialPropId,
+          period: basePeriod,
+          reference: payment.reference ? `Teil 1: ${payment.reference}` : "Miete Monat 1",
+        },
+        {
+          id: "split-2",
+          amount: rest.toFixed(2),
+          category: payment.category || "RENT",
+          tenantId: initialTenantId,
+          propertyId: initialPropId,
+          period: nextPeriod,
+          reference: payment.reference ? `Teil 2: ${payment.reference}` : "Miete Folgemonat",
+        },
+      ]);
+    }
+  }, [open, payment]);
+
+  // Berechnungen & Validierung
+  const sumSplits = useMemo(() => {
+    return splits.reduce((acc, s) => {
+      const val = parseFloat(s.amount.replace(",", ".")) || 0;
+      return acc + val;
+    }, 0);
+  }, [splits]);
+
+  const diff = Math.round((payment.amount - sumSplits) * 100) / 100;
+  const isBalanced = Math.abs(diff) < 0.01;
+  const hasZeroOrInvalid = splits.some((s) => {
+    const val = parseFloat(s.amount.replace(",", "."));
+    return isNaN(val) || Math.abs(val) < 0.001;
+  });
+  const canSave = isBalanced && !hasZeroOrInvalid && splits.length >= 2;
+
+  // Handler: Zeile hinzufügen
+  const handleAddSplit = () => {
+    const defaultPeriod =
+      payment.period && /^\d{4}-\d{2}$/.test(payment.period)
+        ? payment.period
+        : payment.bookingDate
+        ? payment.bookingDate.slice(0, 7)
+        : currentPeriod();
+
+    const lastSplit = splits[splits.length - 1];
+    let nextP = defaultPeriod;
+    if (lastSplit && lastSplit.period && /^\d{4}-\d{2}$/.test(lastSplit.period)) {
+      const [y, m] = lastSplit.period.split("-").map(Number);
+      const nd = new Date(y, m, 1);
+      nextP = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    setSplits((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(36).substring(2, 9),
+        amount: diff !== 0 ? diff.toFixed(2) : "0.00",
+        category: lastSplit?.category || "RENT",
+        tenantId: lastSplit?.tenantId || payment.tenant?.id || "NONE",
+        propertyId: lastSplit?.propertyId || payment.propertyId || "NONE",
+        period: nextP,
+        reference: `Teil ${prev.length + 1}`,
+      },
+    ]);
+  };
+
+  // Handler: Zeile löschen
+  const handleRemoveSplit = (idx: number) => {
+    if (splits.length <= 2) {
+      toast({
+        title: "Mindestens 2 Teilbuchungen nötig",
+        description: "Eine Aufteilung erfordert mindestens zwei Teilbeträge.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSplits((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Handler: Feld ändern
+  const handleUpdateSplit = (idx: number, field: keyof SplitItemState, val: string) => {
+    setSplits((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: val };
+
+      // Wenn Mieter geändert wird, Wohnung automatisch ableiten
+      if (field === "tenantId" && val !== "NONE") {
+        const t = tenants.find((item) => item.id === val);
+        if (t?.property?.id) {
+          next[idx].propertyId = t.property.id;
+        }
+      }
+
+      return next;
+    });
+  };
+
+  // Restbetrag in eine bestimmte Zeile füllen
+  const handleFillRemainder = (idx: number) => {
+    const currentVal = parseFloat(splits[idx].amount.replace(",", ".")) || 0;
+    const newAmount = Math.round((currentVal + diff) * 100) / 100;
+    handleUpdateSplit(idx, "amount", newAmount.toFixed(2));
+  };
+
+  // Preset: 2 Monate Miete (50 / 50)
+  const applyPresetTwoMonths = () => {
+    const basePeriod =
+      payment.period && /^\d{4}-\d{2}$/.test(payment.period)
+        ? payment.period
+        : payment.bookingDate
+        ? payment.bookingDate.slice(0, 7)
+        : currentPeriod();
+
+    const [y, m] = basePeriod.split("-").map(Number);
+    const nextDate = new Date(y, m, 1);
+    const nextPeriod = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+
+    const half = Math.round((payment.amount / 2) * 100) / 100;
+    const rest = Math.round((payment.amount - half) * 100) / 100;
+
+    const tId = splits[0]?.tenantId || payment.tenant?.id || "NONE";
+    const pId = splits[0]?.propertyId || payment.propertyId || "NONE";
+
+    setSplits([
+      {
+        id: "split-1",
+        amount: half.toFixed(2),
+        category: "RENT",
+        tenantId: tId,
+        propertyId: pId,
+        period: basePeriod,
+        reference: `Miete ${basePeriod}`,
+      },
+      {
+        id: "split-2",
+        amount: rest.toFixed(2),
+        category: "RENT",
+        tenantId: tId,
+        propertyId: pId,
+        period: nextPeriod,
+        reference: `Miete ${nextPeriod}`,
+      },
+    ]);
+  };
+
+  // Preset: Miete + Kaution
+  const applyPresetRentAndDeposit = () => {
+    const tId = splits[0]?.tenantId || payment.tenant?.id;
+    const matchedTenant = tenants.find((t) => t.id === tId);
+
+    const basePeriod =
+      payment.period && /^\d{4}-\d{2}$/.test(payment.period)
+        ? payment.period
+        : payment.bookingDate
+        ? payment.bookingDate.slice(0, 7)
+        : currentPeriod();
+
+    const warmRent = matchedTenant ? (matchedTenant.coldRent || 0) + (matchedTenant.utilities || 0) : null;
+
+    if (warmRent && warmRent > 0 && warmRent < Math.abs(payment.amount)) {
+      const depositAmount = Math.round((payment.amount - warmRent) * 100) / 100;
+      setSplits([
+        {
+          id: "split-1",
+          amount: warmRent.toFixed(2),
+          category: "RENT",
+          tenantId: matchedTenant.id,
+          propertyId: matchedTenant.property?.id || "NONE",
+          period: basePeriod,
+          reference: `Miete ${basePeriod}`,
+        },
+        {
+          id: "split-2",
+          amount: depositAmount.toFixed(2),
+          category: "DEPOSIT",
+          tenantId: matchedTenant.id,
+          propertyId: matchedTenant.property?.id || "NONE",
+          period: basePeriod,
+          reference: "Mietkaution",
+        },
+      ]);
+    } else {
+      const half = Math.round((payment.amount / 2) * 100) / 100;
+      const rest = Math.round((payment.amount - half) * 100) / 100;
+      setSplits([
+        {
+          id: "split-1",
+          amount: half.toFixed(2),
+          category: "RENT",
+          tenantId: tId || "NONE",
+          propertyId: splits[0]?.propertyId || "NONE",
+          period: basePeriod,
+          reference: `Miete ${basePeriod}`,
+        },
+        {
+          id: "split-2",
+          amount: rest.toFixed(2),
+          category: "DEPOSIT",
+          tenantId: tId || "NONE",
+          propertyId: splits[0]?.propertyId || "NONE",
+          period: basePeriod,
+          reference: "Mietkaution",
+        },
+      ]);
+    }
+  };
+
+  // Speichern
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      const payload = {
+        splits: splits.map((s) => {
+          let cleanPeriod = s.period?.trim() || "";
+          const deMatch = cleanPeriod.match(/^(\d{1,2})[./-](\d{4})$/);
+          if (deMatch) {
+            cleanPeriod = `${deMatch[2]}-${String(parseInt(deMatch[1], 10)).padStart(2, "0")}`;
+          }
+          return {
+            amount: parseFloat(s.amount.replace(",", ".")),
+            category: s.category,
+            tenantId: s.tenantId === "NONE" ? null : s.tenantId,
+            propertyId: s.propertyId === "NONE" ? null : s.propertyId,
+            period: cleanPeriod || null,
+            reference: s.reference?.trim() || null,
+          };
+        }),
+      };
+
+      const res = await fetch(`/api/payments/${payment.id}/split`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler beim Aufteilen der Buchung");
+
+      toast({
+        title: "Buchung aufgeteilt",
+        description: `${splits.length} Teilbuchungen wurden erfolgreich angelegt und zugeordnet.`,
+      });
+      onUpdated();
+      onOpenChange(false);
+    } catch (err: any) {
+      toast({
+        title: "Fehler beim Aufteilen",
+        description: err.message || "Buchung konnte nicht aufgeteilt werden.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Aufhebung (Unsplit)
+  const handleUnsplit = async () => {
+    if (!confirm("Möchtest du diese Split-Buchung wirklich aufheben? Die Teilbuchungen werden gelöscht und die Originalbuchung wiederhergestellt.")) {
+      return;
+    }
+    setUnsplitLoading(true);
+    try {
+      const res = await fetch(`/api/payments/${payment.id}/split`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fehler beim Aufheben");
+
+      toast({
+        title: "Aufteilung aufgehoben",
+        description: "Die Originalbuchung wurde wiederhergestellt.",
+      });
+      onUpdated();
+      onOpenChange(false);
+    } catch (err: any) {
+      toast({
+        title: "Fehler",
+        description: err.message || "Aufteilung konnte nicht aufgehoben werden.",
+        variant: "destructive",
+      });
+    } finally {
+      setUnsplitLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+              <Split className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-bold">
+                {payment.isSplit ? "Split-Buchung bearbeiten" : "Bankbuchung aufteilen (Split-Buchung)"}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                Teile eine Überweisung auf mehrere Abrechnungsmonate, Mieter oder Kategorien auf (z. B. Miete für 2 Monate oder Miete + Kaution).
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2 text-xs">
+          {/* Originalbuchung Übersicht */}
+          <div className="bg-muted/40 p-3 rounded-xl border space-y-1.5 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground font-medium">Original Bankbuchung:</span>
+              <div className="font-bold text-sm">
+                <span className="text-muted-foreground mr-2 font-normal font-mono">{formatDate(payment.bookingDate)}</span>
+                <span className={payment.amount >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+                  {payment.amount >= 0 ? "+" : ""}{formatCurrency(payment.amount)}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-between items-start text-xs">
+              <span className="text-muted-foreground">Auftraggeber / Payer:</span>
+              <span className="font-semibold text-right max-w-[320px] truncate">{payment.payerName || "–"}</span>
+            </div>
+            {payment.reference && (
+              <div className="pt-1 border-t text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">Verwendungszweck: </span>
+                <span className="font-mono text-foreground/80">{payment.reference}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Preset Buttons */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs font-semibold text-muted-foreground">Vorlagen:</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 border-dashed"
+              onClick={applyPresetTwoMonths}
+            >
+              <Calendar className="h-3 w-3 text-primary" />
+              <span>2 Monate Miete (50% / 50%)</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 border-dashed"
+              onClick={applyPresetRentAndDeposit}
+            >
+              <Building2 className="h-3 w-3 text-emerald-500" />
+              <span>Miete + Kaution</span>
+            </Button>
+          </div>
+
+          {/* Summe & Differenz Kontroll-Leiste */}
+          <div
+            className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-colors ${
+              isBalanced
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-200"
+                : "bg-amber-500/10 border-amber-500/40 text-amber-900 dark:text-amber-200"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {isBalanced ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              )}
+              <span className="font-semibold text-xs">
+                {isBalanced
+                  ? "Aufteilung ausgeglichen: Alle Teilbeträge stimmen mit der Bankbuchung überein."
+                  : `Differenz: ${diff > 0 ? "+" : ""}${formatCurrency(diff)} noch nicht zugewiesen.`}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-xs font-mono self-end sm:self-auto">
+              <div>
+                <span className="text-muted-foreground">Original: </span>
+                <span className="font-bold">{formatCurrency(payment.amount)}</span>
+              </div>
+              <span>=</span>
+              <div>
+                <span className="text-muted-foreground">Teilsumme: </span>
+                <span className="font-bold">{formatCurrency(sumSplits)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Teilbuchungen Liste */}
+          <div className="space-y-3">
+            {splits.map((split, idx) => {
+              return (
+                <div
+                  key={split.id || idx}
+                  className="p-3 rounded-xl border bg-card space-y-3 shadow-xs hover:border-border/80 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[11px] font-semibold bg-muted/40">
+                        Teil #{idx + 1}
+                      </Badge>
+                      <span className="text-xs font-medium text-foreground">
+                        {split.category === "RENT"
+                          ? "Mietzahlung"
+                          : split.category === "DEPOSIT"
+                          ? "Kaution"
+                          : CATEGORY_LABELS[split.category]?.label || split.category}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {Math.abs(diff) >= 0.01 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] px-1.5 text-primary hover:bg-primary/10"
+                          onClick={() => handleFillRemainder(idx)}
+                          title="Restdifferenz in diese Teilbuchung einrechnen"
+                        >
+                          Rest einfügen
+                        </Button>
+                      )}
+                      {splits.length > 2 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveSplit(idx)}
+                          title="Diesen Teil löschen"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Eingabefelder für diesen Split */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {/* Betrag */}
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium">Betrag (€)</Label>
+                      <Input
+                        type="text"
+                        value={split.amount}
+                        onChange={(e) => handleUpdateSplit(idx, "amount", e.target.value)}
+                        placeholder="0.00"
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+
+                    {/* Kategorie */}
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium">Kategorie</Label>
+                      <Select
+                        value={split.category}
+                        onValueChange={(val) => handleUpdateSplit(idx, "category", val)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="RENT">Miete (Laufend)</SelectItem>
+                          <SelectItem value="DEPOSIT">Kaution</SelectItem>
+                          <SelectItem value="UTILITY_IN">Nebenkosten-Abrechnung</SelectItem>
+                          <SelectItem value="LOAN">Darlehen / Annuität</SelectItem>
+                          <SelectItem value="HAUSGELD">Hausgeld</SelectItem>
+                          <SelectItem value="REPAIR">Baumaterial & Reparatur</SelectItem>
+                          <SelectItem value="OTHER">Sonstiges / Privat</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Abrechnungsmonat (Periode) */}
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium">Abrechnungsmonat</Label>
+                      <Input
+                        type="text"
+                        value={split.period}
+                        onChange={(e) => handleUpdateSplit(idx, "period", e.target.value)}
+                        placeholder="YYYY-MM (z.B. 2026-05)"
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+
+                    {/* Mieter */}
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium">Mieter zuordnen</Label>
+                      <Select
+                        value={split.tenantId}
+                        onValueChange={(val) => handleUpdateSplit(idx, "tenantId", val)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Mieter auswählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NONE">-- Kein Mieter --</SelectItem>
+                          {tenants.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.firstName} {t.lastName} {t.isCurrent === false ? "(Vormieter)" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Wohnung */}
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium">Wohnung</Label>
+                      <Select
+                        value={split.propertyId}
+                        onValueChange={(val) => handleUpdateSplit(idx, "propertyId", val)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Wohnung auswählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NONE">-- Keine Wohnung --</SelectItem>
+                          {properties.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Verwendungszweck / Notiz */}
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium">Notiz / Zweck</Label>
+                      <Input
+                        type="text"
+                        value={split.reference}
+                        onChange={(e) => handleUpdateSplit(idx, "reference", e.target.value)}
+                        placeholder="z.B. Miete Mai 2026"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Weiteren Teil hinzufügen Button */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAddSplit}
+            className="w-full h-8 text-xs gap-1.5 border-dashed"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Weiteren Teilbetrag hinzufügen</span>
+          </Button>
+
+          {/* Footer Aktionen */}
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-2 pt-2 border-t">
+            <div>
+              {payment.isSplit && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={unsplitLoading || saving}
+                  onClick={handleUnsplit}
+                  className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  <span>Aufteilung aufheben</span>
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                className="h-8 text-xs"
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!canSave || saving}
+                onClick={handleSave}
+                className="h-8 text-xs gap-1.5 bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                <Split className="h-3.5 w-3.5" />
+                <span>{saving ? "Speichere..." : "Aufteilung speichern"}</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Detaillierter Monatsverlauf je Mieter Modal ────────────────────────────
 function TenantMonthlyHistoryDialog({
   tenant,
@@ -1343,7 +2069,7 @@ function TenantMonthlyHistoryDialog({
   const sollPerMonth = (tenant.coldRent || 0) + (tenant.utilities || 0);
 
   // Alle Zahlungen dieses Mieters ermitteln
-  const tenantPayments = allPayments.filter((p) => p.tenant?.id === tenant.id);
+  const tenantPayments = allPayments.filter((p) => !p.isSplit && p.tenant?.id === tenant.id);
 
   // Abrechnungsmonat der Zahlung bestimmen (priorisiert p.period vor Buchungsdatum)
   const getPaymentPeriod = (p: Payment): string => {
@@ -1751,6 +2477,17 @@ function ZahlungenContent() {
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [historyTenant, setHistoryTenant] = useState<Tenant | null>(null);
+  const [splitDialogPayment, setSplitDialogPayment] = useState<Payment | null>(null);
+  const [expandedSplitIds, setExpandedSplitIds] = useState<Set<string>>(new Set());
+
+  const toggleExpandSplit = (id: string) => {
+    setExpandedSplitIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const s = searchParams.get("search");
@@ -1859,21 +2596,35 @@ function ZahlungenContent() {
   // Gefilterte Zahlungen basierend auf Monat und Filtern
   const displayedPayments = useMemo(() => {
     return allPayments.filter((p) => {
+      // Split-Kinderbuchungen werden unter der übergeordneten Hauptbuchung angezeigt
+      if (p.parentPaymentId) return false;
+
       // Monatsfilter (nach abrechnungsrelevantem Monat)
       if (period !== "ALL") {
         const pPeriod =
           p.period && /^\d{4}-\d{2}$/.test(p.period)
             ? p.period
-            : p.bookingDate.slice(0, 7);
-        if (pPeriod !== period) return false;
+            : p.bookingDate ? p.bookingDate.slice(0, 7) : "";
+
+        // Falls Buchung aufgeteilt ist, prüfen ob eines der Split-Kinder in die Periode fällt
+        const matchesSplitChild = p.isSplit && p.splitPayments?.some((sp) => {
+          const spPeriod = sp.period && /^\d{4}-\d{2}$/.test(sp.period)
+            ? sp.period
+            : sp.bookingDate ? sp.bookingDate.slice(0, 7) : "";
+          return spPeriod === period;
+        });
+
+        if (pPeriod !== period && !matchesSplitChild) return false;
       }
 
       // Kategorie-Filter
       if (categoryFilter !== "ALL") {
         if (categoryFilter === "REPAIR") {
-          if (p.category !== "REPAIR" && p.category !== "MAINTENANCE") return false;
-        } else if (p.category !== categoryFilter) {
-          return false;
+          const matchesChild = p.isSplit && p.splitPayments?.some((sp) => sp.category === "REPAIR" || sp.category === "MAINTENANCE");
+          if (p.category !== "REPAIR" && p.category !== "MAINTENANCE" && !matchesChild) return false;
+        } else {
+          const matchesChild = p.isSplit && p.splitPayments?.some((sp) => sp.category === categoryFilter);
+          if (p.category !== categoryFilter && !matchesChild) return false;
         }
       }
 
@@ -1890,7 +2641,15 @@ function ZahlungenContent() {
         const loanMatch = (p.loan?.label || p.loan?.bank || "").toLowerCase().includes(query);
         const catLabel = (CATEGORY_LABELS[p.category]?.label || "").toLowerCase();
         const catMatch = catLabel.includes(query);
-        return payerMatch || refMatch || tenantMatch || propMatch || loanMatch || catMatch;
+
+        const splitMatch = p.isSplit && p.splitPayments?.some((sp) => {
+          const spTenant = sp.tenant ? `${sp.tenant.firstName} ${sp.tenant.lastName}`.toLowerCase().includes(query) : false;
+          const spRef = (sp.reference || "").toLowerCase().includes(query);
+          const spCat = (CATEGORY_LABELS[sp.category]?.label || "").toLowerCase().includes(query);
+          return spTenant || spRef || spCat;
+        });
+
+        return payerMatch || refMatch || tenantMatch || propMatch || loanMatch || catMatch || Boolean(splitMatch);
       }
 
       return true;
@@ -1937,6 +2696,7 @@ function ZahlungenContent() {
           if (t.moveOutDate && t.moveOutDate.slice(0, 7) < pMonth) continue;
 
           const tenantPayments = allPayments.filter((p) => {
+            if (p.isSplit) return false;
             if (p.tenant?.id !== t.id) return false;
             const pMonthPayment =
               p.period && /^\d{4}-\d{2}$/.test(p.period)
@@ -2057,6 +2817,7 @@ function ZahlungenContent() {
 
     return activeTenants.map((t) => {
       const tenantPayments = allPayments.filter((p) => {
+        if (p.isSplit) return false;
         if (p.tenant?.id !== t.id) return false;
         const pMonthPayment =
           p.period && /^\d{4}-\d{2}$/.test(p.period)
@@ -2171,17 +2932,39 @@ function ZahlungenContent() {
   }, [monthStatus, searchQuery]);
 
   // Kennzahlen für die KPI-Karten (Eingänge, Ausgänge, Balance)
+  // Ausschluss von Eltern-Split-Buchungen, damit Beträge bei Aufteilung nicht doppelt erfasst werden
+  const effectivePaymentsForKpis = useMemo(() => {
+    return allPayments.filter((p) => {
+      if (p.isSplit) return false; // Eltern nicht zählen, nur Split-Kinder
+      if (period !== "ALL") {
+        const pPeriod =
+          p.period && /^\d{4}-\d{2}$/.test(p.period)
+            ? p.period
+            : p.bookingDate.slice(0, 7);
+        if (pPeriod !== period) return false;
+      }
+      if (categoryFilter !== "ALL") {
+        if (categoryFilter === "REPAIR") {
+          if (p.category !== "REPAIR" && p.category !== "MAINTENANCE") return false;
+        } else if (p.category !== categoryFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [allPayments, period, categoryFilter]);
+
   const totalIn = useMemo(() => {
-    return displayedPayments
+    return effectivePaymentsForKpis
       .filter((p) => p.amount > 0)
       .reduce((s, p) => s + p.amount, 0);
-  }, [displayedPayments]);
+  }, [effectivePaymentsForKpis]);
 
   const totalOut = useMemo(() => {
-    return displayedPayments
+    return effectivePaymentsForKpis
       .filter((p) => p.amount < 0)
       .reduce((s, p) => s + p.amount, 0);
-  }, [displayedPayments]);
+  }, [effectivePaymentsForKpis]);
 
   // Balance: Eingegangen minus Abgegangen (totalOut ist bereits negativ gespeichert)
   const balance = useMemo(() => {
@@ -2255,7 +3038,15 @@ function ZahlungenContent() {
           </Select>
 
           {/* n8n Comdirect Bankabruf (Maurizio & Steven) mit Auto-Sync */}
-          <N8nBankSyncButtons onSyncComplete={() => { fetchPayments(); fetchTenants(); fetchAccountBalance(); }} />
+          <N8nBankSyncButtons
+            currentBalance={accountBalance}
+            onSyncComplete={(newBal) => {
+              fetchPayments();
+              fetchTenants();
+              if (newBal) setAccountBalance(newBal);
+              else fetchAccountBalance();
+            }}
+          />
 
           {/* Zuordnungen neu abgleichen (Re-Match) */}
           <RematchButton onRematchComplete={() => { fetchPayments(); fetchTenants(); fetchAccountBalance(); }} />
@@ -2903,7 +3694,8 @@ function ZahlungenContent() {
                           }
 
                           return (
-                            <TableRow key={payment.id} className="hover:bg-muted/50 transition-colors">
+                            <Fragment key={payment.id}>
+                            <TableRow className="hover:bg-muted/50 transition-colors">
                               {/* 1. Datum */}
                               <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
                                 {formatDate(payment.bookingDate)}
@@ -3018,27 +3810,70 @@ function ZahlungenContent() {
 
                               {/* 8. Kategorie & Matching */}
                               <TableCell>
-                                <div className="flex flex-col gap-1 items-start">
-                                  <span
-                                    className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                      CATEGORY_LABELS[payment.category]?.color || "bg-muted text-muted-foreground"
-                                    }`}
-                                  >
-                                    {CATEGORY_LABELS[payment.category]?.label || payment.category}
-                                  </span>
-                                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                    <MethodIcon className="h-3 w-3" />
-                                    <span>{method.label}</span>
-                                    {payment.matchConfidence && payment.matchMethod === "AI" && (
-                                      <span>({(payment.matchConfidence * 100).toFixed(0)}%)</span>
-                                    )}
+                                {payment.isSplit ? (
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                      <Split className="h-3 w-3" />
+                                      Split ({payment.splitPayments?.length || 0} Teile)
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandSplit(payment.id)}
+                                      className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-0.5 mt-0.5 font-medium"
+                                    >
+                                      {expandedSplitIds.has(payment.id) ? (
+                                        <>
+                                          <ChevronUp className="h-3 w-3" /> Details einklappen
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ChevronDown className="h-3 w-3" /> Details anzeigen
+                                        </>
+                                      )}
+                                    </button>
                                   </div>
-                                </div>
+                                ) : (
+                                  <div className="flex flex-col gap-1 items-start">
+                                    <span
+                                      className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                        CATEGORY_LABELS[payment.category]?.color || "bg-muted text-muted-foreground"
+                                      }`}
+                                    >
+                                      {CATEGORY_LABELS[payment.category]?.label || payment.category}
+                                    </span>
+                                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                      <MethodIcon className="h-3 w-3" />
+                                      <span>{method.label}</span>
+                                      {payment.matchConfidence && payment.matchMethod === "AI" && (
+                                        <span>({(payment.matchConfidence * 100).toFixed(0)}%)</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </TableCell>
 
                               {/* 9. Mieter / Zuordnung */}
                               <TableCell className="text-sm">
-                                {tenant ? (
+                                {payment.isSplit ? (
+                                  <div className="flex flex-col gap-1">
+                                    {payment.splitPayments && payment.splitPayments.length > 0 ? (
+                                      payment.splitPayments.map((sp, sIdx) => (
+                                        <div key={sp.id || sIdx} className="text-xs flex items-center gap-1.5 text-muted-foreground flex-wrap">
+                                          <span className="font-semibold text-foreground">{formatCurrency(sp.amount)}</span>
+                                          <span className="text-[10px] px-1 py-0.2 rounded bg-muted/70 text-foreground font-medium">
+                                            {CATEGORY_LABELS[sp.category]?.label || sp.category}
+                                          </span>
+                                          <span className="font-medium text-foreground">
+                                            {sp.tenant ? `${sp.tenant.firstName} ${sp.tenant.lastName}` : sp.property?.name || "Allgemein"}
+                                          </span>
+                                          {sp.period && <span className="font-mono text-[10px] text-muted-foreground">({sp.period})</span>}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <span className="text-muted-foreground text-xs italic">Aufgeteilt</span>
+                                    )}
+                                  </div>
+                                ) : tenant ? (
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="font-medium text-foreground">
                                       {tenant.firstName} {tenant.lastName}
@@ -3068,15 +3903,91 @@ function ZahlungenContent() {
 
                               {/* 10. Aktion */}
                               <TableCell className="text-right">
-                                <EditPaymentDialog
-                                  payment={payment}
-                                  tenants={tenants}
-                                  properties={properties}
-                                  loans={loans}
-                                  onUpdated={fetchPayments}
-                                />
+                                <div className="flex items-center justify-end gap-1">
+                                  {payment.isSplit ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs gap-1 border-purple-500/40 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10"
+                                      onClick={() => setSplitDialogPayment(payment)}
+                                    >
+                                      <Split className="h-3.5 w-3.5" />
+                                      <span>Split bearbeiten</span>
+                                    </Button>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs gap-1 border-dashed text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 hover:border-purple-500/60"
+                                        onClick={() => setSplitDialogPayment(payment)}
+                                        title="In Teilbuchungen (z.B. 2 Monate Miete oder Miete + Kaution) aufteilen"
+                                      >
+                                        <Split className="h-3.5 w-3.5" />
+                                        <span>Aufteilen</span>
+                                      </Button>
+                                      <EditPaymentDialog
+                                        payment={payment}
+                                        tenants={tenants}
+                                        properties={properties}
+                                        loans={loans}
+                                        onUpdated={fetchPayments}
+                                      />
+                                    </>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
+                            {payment.isSplit && expandedSplitIds.has(payment.id) && (
+                              <TableRow key={`${payment.id}-splits`} className="bg-purple-50/30 dark:bg-purple-950/20 border-b">
+                                <TableCell colSpan={showPurpose ? 10 : 9} className="py-3 px-6">
+                                  <div className="pl-4 border-l-2 border-purple-500/50 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-semibold text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                                        <Split className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                                        Aufgeteilte Buchungen ({payment.splitPayments?.length || 0} Teilbuchungen) • Gesamt: {formatCurrency(payment.amount)}
+                                      </span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 text-[11px] text-purple-700 dark:text-purple-300 hover:underline p-0"
+                                        onClick={() => setSplitDialogPayment(payment)}
+                                      >
+                                        Aufteilung anpassen →
+                                      </Button>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                      {payment.splitPayments?.map((sp, idx) => (
+                                        <div key={sp.id || idx} className="p-2.5 rounded-lg bg-background/80 border text-xs space-y-1.5 shadow-xs">
+                                          <div className="flex justify-between items-center">
+                                            <span className="font-bold text-sm text-foreground">{formatCurrency(sp.amount)}</span>
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CATEGORY_LABELS[sp.category]?.color || "bg-muted"}`}>
+                                              {CATEGORY_LABELS[sp.category]?.label || sp.category}
+                                            </span>
+                                          </div>
+                                          <div className="text-muted-foreground text-[11px] truncate">
+                                            Mieter: <span className="text-foreground font-medium">{sp.tenant ? `${sp.tenant.firstName} ${sp.tenant.lastName}` : "–"}</span>
+                                          </div>
+                                          <div className="text-muted-foreground text-[11px] truncate">
+                                            Wohnung: <span className="text-foreground">{sp.property?.name || sp.tenant?.property?.name || "–"}</span>
+                                          </div>
+                                          <div className="text-muted-foreground text-[11px] flex justify-between">
+                                            <span>Abrechnungsmonat:</span>
+                                            <span className="font-mono text-foreground font-medium">{sp.period || "–"}</span>
+                                          </div>
+                                          {sp.reference && (
+                                            <div className="text-[10px] text-muted-foreground/80 truncate border-t pt-1 font-mono">
+                                              {sp.reference}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            </Fragment>
                           );
                         })
                       )}
@@ -3096,6 +4007,22 @@ function ZahlungenContent() {
         open={!!historyTenant}
         onOpenChange={(open) => !open && setHistoryTenant(null)}
       />
+
+      {/* Split-Buchung Dialog */}
+      {splitDialogPayment && (
+        <SplitPaymentDialog
+          payment={splitDialogPayment}
+          tenants={tenants}
+          properties={properties}
+          open={!!splitDialogPayment}
+          onOpenChange={(isOpen) => !isOpen && setSplitDialogPayment(null)}
+          onUpdated={() => {
+            fetchPayments();
+            fetchTenants();
+            fetchAccountBalance();
+          }}
+        />
+      )}
     </div>
   );
 }

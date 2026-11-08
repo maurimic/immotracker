@@ -38,6 +38,25 @@ export async function GET(request: Request) {
           property: true,
         },
       },
+      splitPayments: {
+        include: {
+          tenant: {
+            include: {
+              property: true,
+            },
+          },
+          property: true,
+          loan: true,
+        },
+      },
+      parentPayment: {
+        select: {
+          id: true,
+          amount: true,
+          bookingDate: true,
+          payerName: true,
+        },
+      },
     },
     orderBy: { bookingDate: "desc" },
     take: 500,

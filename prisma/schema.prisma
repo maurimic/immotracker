@@ -123,6 +123,12 @@ model Payment {
   loanId        String?
   loan          Loan?     @relation(fields: [loanId], references: [id])
 
+  // Split-Buchung Hierarchie
+  parentPaymentId String?
+  parentPayment   Payment?  @relation("PaymentSplits", fields: [parentPaymentId], references: [id], onDelete: Cascade)
+  splitPayments   Payment[] @relation("PaymentSplits")
+  isSplit         Boolean   @default(false)
+
   // Rohdaten aus Google Sheets
   bookingDate   DateTime
   amount        Float
@@ -146,6 +152,7 @@ model Payment {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@index([parentPaymentId])
   @@map("payments")
 }
 

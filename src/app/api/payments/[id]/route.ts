@@ -69,6 +69,21 @@ export async function PATCH(
           property: true,
         },
       },
+      splitPayments: {
+        include: {
+          tenant: { include: { property: true } },
+          property: true,
+          loan: true,
+        },
+      },
+      parentPayment: {
+        select: {
+          id: true,
+          amount: true,
+          bookingDate: true,
+          payerName: true,
+        },
+      },
     },
   });
 

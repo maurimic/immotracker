@@ -84,6 +84,22 @@ export async function ensureSchema() {
     // Drop unique index on propertyId so apartments can have former & current tenants
     await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "tenants_propertyId_key";`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "tenants_propertyId_idx" ON "tenants"("propertyId");`);
+
+    // Payments: Split-Buchungen support (parentPaymentId, isSplit)
+    const paymentCols = (await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info(payments)`)) || [];
+    const paymentColNames = new Set(paymentCols.map((c) => c.name));
+
+    if (!paymentColNames.has("parentPaymentId")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "payments" ADD COLUMN "parentPaymentId" TEXT;`
+      );
+    }
+    if (!paymentColNames.has("isSplit")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "payments" ADD COLUMN "isSplit" BOOLEAN NOT NULL DEFAULT 0;`
+      );
+    }
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "payments_parentPaymentId_idx" ON "payments"("parentPaymentId");`);
   } catch (err) {
     console.warn("Schema auto-ensure notice:", err);
   }
