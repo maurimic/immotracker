@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
       type: body.type,
       value: parseFloat(body.value),
       unit: body.unit || "kWh",
-      readingDate: new Date(body.readingDate),
+      readingDate: safeDate(body.readingDate) || new Date(),
       photoPath: body.photoPath,
       notes: body.notes,
     },

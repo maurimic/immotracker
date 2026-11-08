@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -352,7 +353,7 @@ function AddMeterDialog({ properties, onRefresh }: { properties: Property[]; onR
             </div>
             <div className="space-y-2">
               <Label>Ablesedatum</Label>
-              <Input type="date" value={form.readingDate}
+              <DateInput value={form.readingDate}
                 onChange={(e) => setForm({ ...form, readingDate: e.target.value })} />
             </div>
             <div className="space-y-2 col-span-2">

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -648,8 +649,7 @@ export function PropertyInvestmentsDialog({
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Rechnungsdatum *</Label>
-                    <Input
-                      type="date"
+                    <DateInput
                       value={form.date}
                       onChange={(e) => setForm({ ...form, date: e.target.value })}
                       required

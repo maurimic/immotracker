@@ -35,10 +35,101 @@ export function formatCompactCurrency(amount: number): string {
 }
 
 /**
+ * Validiert und parst einen Datumsstring (deutsch oder ISO) in ein ISO YYYY-MM-DD.
+ * Gibt null zurück, wenn das Datum ungültig ist.
+ */
+export function parseDateToISO(input?: unknown): string | null {
+  if (!input) return null;
+  if (input instanceof Date) {
+    if (isNaN(input.getTime())) return null;
+    const y = input.getFullYear();
+    const m = String(input.getMonth() + 1).padStart(2, "0");
+    const d = String(input.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  const trimmed = String(input).trim();
+  if (!trimmed) return null;
+
+  // 1. Bereits ISO YYYY-MM-DD (ggf. mit Zeitanteil)
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const parts = trimmed.split("T")[0].split("-");
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10);
+    const testDate = new Date(y, m - 1, d);
+    if (
+      !isNaN(testDate.getTime()) &&
+      testDate.getFullYear() === y &&
+      testDate.getMonth() === m - 1 &&
+      testDate.getDate() === d
+    ) {
+      return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+  }
+
+  // 2. Deutsches Format DD.MM.YYYY oder DD/MM/YYYY oder DD-MM-YYYY
+  const match = trimmed.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    let year = parseInt(match[3], 10);
+    if (year < 100) {
+      year += year < 50 ? 2000 : 1900;
+    }
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+      const testDate = new Date(year, month - 1, day);
+      if (
+        testDate.getFullYear() === year &&
+        testDate.getMonth() === month - 1 &&
+        testDate.getDate() === day
+      ) {
+        return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
+    }
+  }
+
+  // 3. Reines 8-stelliges Zahlenformat DDMMYYYY
+  const digitsMatch = trimmed.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if (digitsMatch) {
+    const day = parseInt(digitsMatch[1], 10);
+    const month = parseInt(digitsMatch[2], 10);
+    const year = parseInt(digitsMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+      const testDate = new Date(year, month - 1, day);
+      if (
+        testDate.getFullYear() === year &&
+        testDate.getMonth() === month - 1 &&
+        testDate.getDate() === day
+      ) {
+        return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Sichere Konvertierung beliebiger Datumseingaben in ein valides Date-Objekt.
+ */
+export function safeDate(val: unknown): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? null : val;
+  }
+  const iso = parseDateToISO(val);
+  if (iso) return new Date(iso);
+  const d = new Date(String(val));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Formatiert ein Datum auf Deutsch
  */
 export function formatDate(date: Date | string, options?: Intl.DateTimeFormatOptions): string {
-  const d = typeof date === "string" ? new Date(date) : date;
+  const d = safeDate(date);
+  if (!d) return typeof date === "string" ? date : "–";
   return d.toLocaleDateString("de-DE", options ?? {
     day: "2-digit",
     month: "2-digit",

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { calculateCurrentBalanceFromTerms, calculateAmortization } from "@/lib/utils";
+import { calculateCurrentBalanceFromTerms, calculateAmortization, safeDate } from "@/lib/utils";
 
 export async function GET() {
   const loans = await prisma.loan.findMany({
@@ -23,8 +23,8 @@ export async function POST(request: Request) {
     const originalAmount = parseFloat(body.originalAmount);
     const interestRate = parseFloat(body.interestRate);
     const monthlyPayment = parseFloat(body.monthlyPayment);
-    const startDate = new Date(body.startDate);
-    const fixedRateEnd = new Date(body.fixedRateEnd);
+    const startDate = safeDate(body.startDate) || new Date();
+    const fixedRateEnd = safeDate(body.fixedRateEnd) || new Date();
 
     // Auto-calculate current balance if not specified
     let currentBalance: number;

@@ -1078,6 +1078,12 @@ function EditPaymentDialog({
   const handleSave = async () => {
     setLoading(true);
     try {
+      let cleanPeriod = selectedPeriod.trim();
+      const dePeriodMatch = cleanPeriod.match(/^(\d{1,2})[./-](\d{4})$/);
+      if (dePeriodMatch) {
+        cleanPeriod = `${dePeriodMatch[2]}-${String(parseInt(dePeriodMatch[1], 10)).padStart(2, "0")}`;
+      }
+
       const res = await fetch(`/api/payments/${payment.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1093,7 +1099,7 @@ function EditPaymentDialog({
           loanId: selectedLoanId === "NONE" ? null : selectedLoanId,
           category: selectedCategory,
           matchMethod: selectedMethod,
-          period: selectedPeriod.trim() || null,
+          period: cleanPeriod || null,
           status:
             selectedTenantId !== "NONE" ||
             selectedPropertyId !== "NONE" ||
@@ -1266,13 +1272,13 @@ function EditPaymentDialog({
             </div>
             <Input
               type="text"
-              placeholder="z.B. 2026-03"
+              placeholder="z.B. 03.2026 oder 2026-03"
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
               className="h-9 text-xs font-mono"
             />
             <p className="text-[10px] text-muted-foreground">
-              Format: YYYY-MM (z.B. 2026-03 für März 2026). Wenn ein Mieter am 27.02. die Miete für März überweist, hier <strong>2026-03</strong> eintragen.
+              Format: MM.YYYY (z.B. 03.2026) oder YYYY-MM (z.B. 2026-03 für März 2026). Wenn ein Mieter am 27.02. die Miete für März überweist, hier <strong>03.2026</strong> bzw. <strong>2026-03</strong> eintragen.
             </p>
           </div>
 

@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -273,8 +274,7 @@ function AddLoanDialog({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Darlehensstart *</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.startDate}
                 onChange={(e) => handleFieldChange("startDate", e.target.value)}
                 required
@@ -319,8 +319,7 @@ function AddLoanDialog({
             </div>
             <div className="space-y-1 col-span-2">
               <Label className="text-xs">Zinsbindungsende *</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.fixedRateEnd}
                 onChange={(e) => handleFieldChange("fixedRateEnd", e.target.value)}
                 required
@@ -495,8 +494,7 @@ function EditLoanDialog({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Darlehensstart *</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.startDate}
                 onChange={(e) => setForm({ ...form, startDate: e.target.value })}
                 required
@@ -530,8 +528,7 @@ function EditLoanDialog({
             </div>
             <div className="space-y-1 col-span-2">
               <Label className="text-xs">Zinsbindungsende *</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.fixedRateEnd}
                 onChange={(e) => setForm({ ...form, fixedRateEnd: e.target.value })}
                 required

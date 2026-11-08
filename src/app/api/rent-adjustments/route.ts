@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function GET(req: Request) {
   try {
@@ -67,7 +68,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const effectiveDate = new Date(body.effectiveDate);
+    const effectiveDate = safeDate(body.effectiveDate) || new Date(body.effectiveDate);
     const newColdRent = body.newColdRent !== undefined && body.newColdRent !== "" && body.newColdRent !== null
       ? parseFloat(body.newColdRent)
       : null;

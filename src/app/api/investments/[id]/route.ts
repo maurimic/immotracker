@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,7 @@ export async function PUT(
         description: body.description !== undefined ? (body.description ? body.description.trim() : null) : undefined,
         amount: gross !== undefined && !isNaN(gross) ? gross : undefined,
         amountNet: net !== undefined && !isNaN(net) ? net : undefined,
-        date: body.date ? new Date(body.date) : undefined,
+        date: body.date ? (safeDate(body.date) || undefined) : undefined,
         craftsman: body.craftsman !== undefined ? (body.craftsman ? body.craftsman.trim() : null) : undefined,
         category: body.category !== undefined ? body.category : undefined,
         isCapitalized: body.isCapitalized !== undefined ? Boolean(body.isCapitalized) : undefined,

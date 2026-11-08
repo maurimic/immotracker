@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function DELETE(
   request: Request,
@@ -33,7 +34,7 @@ export async function PATCH(
         period: body.period !== undefined ? body.period : undefined,
         description: body.description !== undefined ? body.description : undefined,
         propertyId: body.propertyId !== undefined ? (body.propertyId || null) : undefined,
-        bookingDate: body.bookingDate ? new Date(body.bookingDate) : undefined,
+        bookingDate: body.bookingDate ? (safeDate(body.bookingDate) || undefined) : undefined,
       },
       include: { property: { select: { name: true } } },
     });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function GET() {
   const tenants = await prisma.tenant.findMany({
@@ -69,9 +70,9 @@ export async function POST(request: Request) {
         utilities: parseFloat(body.utilities || 0),
         deposit: parseFloat(body.deposit || 0),
         depositPaid: Boolean(body.depositPaid),
-        moveInDate: body.moveInDate ? new Date(body.moveInDate) : null,
-        contractStart: body.contractStart ? new Date(body.contractStart) : null,
-        moveOutDate: body.moveOutDate ? new Date(body.moveOutDate) : null,
+        moveInDate: body.moveInDate ? safeDate(body.moveInDate) : null,
+        contractStart: body.contractStart ? safeDate(body.contractStart) : null,
+        moveOutDate: body.moveOutDate ? safeDate(body.moveOutDate) : null,
       },
       include: { property: { select: { name: true } } },
     });

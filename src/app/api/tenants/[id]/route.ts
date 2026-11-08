@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function GET(
   request: Request,
@@ -32,9 +33,9 @@ export async function PUT(
         utilities: body.utilities !== undefined ? parseFloat(body.utilities) : undefined,
         deposit: body.deposit !== undefined ? parseFloat(body.deposit) : undefined,
         depositPaid: body.depositPaid !== undefined ? Boolean(body.depositPaid) : undefined,
-        moveInDate: body.moveInDate ? new Date(body.moveInDate) : undefined,
-        contractStart: body.contractStart ? new Date(body.contractStart) : undefined,
-        moveOutDate: body.moveOutDate ? new Date(body.moveOutDate) : null,
+        moveInDate: body.moveInDate ? safeDate(body.moveInDate) || undefined : undefined,
+        contractStart: body.contractStart ? safeDate(body.contractStart) || undefined : undefined,
+        moveOutDate: body.moveOutDate !== undefined ? (body.moveOutDate ? safeDate(body.moveOutDate) : null) : undefined,
       },
       include: { property: { select: { name: true } } },
     });
@@ -66,7 +67,7 @@ export async function DELETE(
 
     if (action === "archive") {
       const moveOutDateStr = searchParams.get("moveOutDate");
-      const moveOutDate = moveOutDateStr ? new Date(moveOutDateStr) : new Date();
+      const moveOutDate = moveOutDateStr ? (safeDate(moveOutDateStr) || new Date()) : new Date();
       await prisma.tenant.update({
         where: { id: tenantId },
         data: {

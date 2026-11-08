@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function DELETE(
   req: Request,
@@ -29,7 +30,7 @@ export async function PATCH(
     const body = await req.json();
 
     const updateData: any = {};
-    if (body.effectiveDate) updateData.effectiveDate = new Date(body.effectiveDate);
+    if (body.effectiveDate) updateData.effectiveDate = safeDate(body.effectiveDate) || new Date(body.effectiveDate);
     if (body.newColdRent !== undefined) updateData.newColdRent = body.newColdRent ? parseFloat(body.newColdRent) : null;
     if (body.newUtilities !== undefined) updateData.newUtilities = body.newUtilities ? parseFloat(body.newUtilities) : null;
     if (body.previousColdRent !== undefined) updateData.previousColdRent = body.previousColdRent ? parseFloat(body.previousColdRent) : null;

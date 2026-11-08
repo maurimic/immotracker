@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -199,8 +200,7 @@ function AddUtilityBillDialog({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Buchungsdatum</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.bookingDate}
                 onChange={(e) => setForm({ ...form, bookingDate: e.target.value })}
                 required

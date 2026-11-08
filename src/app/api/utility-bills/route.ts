@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function GET() {
   const bills = await prisma.utilityBill.findMany({
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
   const bill = await prisma.utilityBill.create({
     data: {
       propertyId: body.propertyId || null,
-      bookingDate: new Date(body.bookingDate),
+      bookingDate: safeDate(body.bookingDate) || new Date(),
       amount: parseFloat(body.amount),
       vendor: body.vendor,
       category: body.category || "OTHER",

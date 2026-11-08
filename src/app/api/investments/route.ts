@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
         description: body.description?.trim() || null,
         amount: gross,
         amountNet: net,
-        date: body.date ? new Date(body.date) : new Date(),
+        date: body.date ? (safeDate(body.date) || new Date()) : new Date(),
         craftsman: body.craftsman?.trim() || null,
         category: body.category || "SANIERUNG",
         isCapitalized: body.isCapitalized !== undefined ? Boolean(body.isCapitalized) : true,

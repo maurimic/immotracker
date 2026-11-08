@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -569,8 +570,7 @@ function EditPropertyDialog({
                 <Label className="text-xs flex items-center gap-1">
                   <Calendar className="h-3 w-3 text-muted-foreground" /> Notarvertrag
                 </Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={form.purchasedAt}
                   onChange={(e) => setForm({ ...form, purchasedAt: e.target.value })}
                 />
@@ -580,8 +580,7 @@ function EditPropertyDialog({
                 <Label className="text-xs flex items-center gap-1">
                   <Clock className="h-3 w-3 text-primary" /> Nutzen & Lasten
                 </Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={form.possessionAt}
                   onChange={(e) => setForm({ ...form, possessionAt: e.target.value })}
                 />
@@ -941,8 +940,7 @@ function AddTenantDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Mietbeginn / Einzug *</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.moveInDate}
                 onChange={(e) => setForm({ ...form, moveInDate: e.target.value })}
                 required
@@ -950,8 +948,7 @@ function AddTenantDialog({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Vertragsbeginn *</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.contractStart}
                 onChange={(e) => setForm({ ...form, contractStart: e.target.value })}
                 required
@@ -1118,16 +1115,14 @@ function AddFormerTenantDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Mietbeginn / Einzug</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.moveInDate}
                 onChange={(e) => setForm({ ...form, moveInDate: e.target.value })}
               />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Mietende / Auszug</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={form.moveOutDate}
                 onChange={(e) => setForm({ ...form, moveOutDate: e.target.value })}
               />
@@ -1303,16 +1298,16 @@ function EditTenantDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Einzugsdatum</Label>
-              <Input type="date" value={form.moveInDate} onChange={(e) => setForm({ ...form, moveInDate: e.target.value })} />
+              <DateInput value={form.moveInDate} onChange={(e) => setForm({ ...form, moveInDate: e.target.value })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Vertragsbeginn</Label>
-              <Input type="date" value={form.contractStart} onChange={(e) => setForm({ ...form, contractStart: e.target.value })} />
+              <DateInput value={form.contractStart} onChange={(e) => setForm({ ...form, contractStart: e.target.value })} />
             </div>
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Auszugsdatum (optional, bei Beendigung)</Label>
-            <Input type="date" value={form.moveOutDate} onChange={(e) => setForm({ ...form, moveOutDate: e.target.value })} />
+            <DateInput value={form.moveOutDate} onChange={(e) => setForm({ ...form, moveOutDate: e.target.value })} />
           </div>
           <div className="flex justify-end gap-2 pt-3">
             <Button variant="outline" type="button" onClick={() => setOpen(false)}>Abbrechen</Button>
@@ -1450,8 +1445,7 @@ function RemoveTenantDialog({
               </p>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Auszugsdatum / Mietvertragsende</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={moveOutDate}
                   onChange={(e) => setMoveOutDate(e.target.value)}
                   className="h-8 text-xs"
@@ -2478,8 +2472,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 <Label className="text-xs flex items-center gap-1">
                   <Calendar className="h-3 w-3 text-muted-foreground" /> Notarvertrag
                 </Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={form.purchasedAt}
                   onChange={(e) => setForm({ ...form, purchasedAt: e.target.value })}
                 />
@@ -2489,8 +2482,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 <Label className="text-xs flex items-center gap-1">
                   <Clock className="h-3 w-3 text-primary" /> Nutzen & Lasten
                 </Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={form.possessionAt}
                   onChange={(e) => setForm({ ...form, possessionAt: e.target.value })}
                 />
@@ -2723,16 +2715,14 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Mietbeginn / Einzug</Label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={form.tenantMoveInDate}
                     onChange={(e) => setForm({ ...form, tenantMoveInDate: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Vertragsbeginn</Label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={form.tenantContractStart}
                     onChange={(e) => setForm({ ...form, tenantContractStart: e.target.value })}
                   />

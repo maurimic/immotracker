@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -93,8 +94,8 @@ export async function POST(request: Request) {
         floor: body.floor || null,
         rooms: body.rooms ? parseFloat(body.rooms) : null,
         purchasePrice: parseOptFloat(body.purchasePrice),
-        purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : null,
-        possessionAt: body.possessionAt ? new Date(body.possessionAt) : null,
+        purchasedAt: body.purchasedAt ? safeDate(body.purchasedAt) : null,
+        possessionAt: body.possessionAt ? safeDate(body.possessionAt) : null,
         ancillaryCosts: totalAncillary,
         propertyTransferTax: pTax,
         notaryCosts: notary,

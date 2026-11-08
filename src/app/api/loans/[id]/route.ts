@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function GET(
   request: Request,
@@ -32,8 +33,8 @@ export async function PUT(
         currentBalance: body.currentBalance !== undefined ? parseFloat(body.currentBalance) : undefined,
         interestRate: body.interestRate ? parseFloat(body.interestRate) : undefined,
         monthlyPayment: body.monthlyPayment ? parseFloat(body.monthlyPayment) : undefined,
-        startDate: body.startDate ? new Date(body.startDate) : undefined,
-        fixedRateEnd: body.fixedRateEnd ? new Date(body.fixedRateEnd) : undefined,
+        startDate: body.startDate ? safeDate(body.startDate) || undefined : undefined,
+        fixedRateEnd: body.fixedRateEnd ? safeDate(body.fixedRateEnd) || undefined : undefined,
       },
       include: { property: { select: { name: true, sqm: true } } },
     });

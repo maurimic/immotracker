@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { safeDate } from "@/lib/utils";
 
 export async function DELETE(
   request: Request,
@@ -29,7 +30,7 @@ export async function PATCH(
         value: body.value !== undefined ? parseFloat(body.value) : undefined,
         unit: body.unit !== undefined ? body.unit : undefined,
         type: body.type !== undefined ? body.type : undefined,
-        readingDate: body.readingDate ? new Date(body.readingDate) : undefined,
+        readingDate: body.readingDate ? (safeDate(body.readingDate) || undefined) : undefined,
         notes: body.notes !== undefined ? body.notes : undefined,
         propertyId: body.propertyId !== undefined ? body.propertyId : undefined,
       },

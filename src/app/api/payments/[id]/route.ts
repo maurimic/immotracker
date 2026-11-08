@@ -25,7 +25,14 @@ export async function PATCH(
     updateData.category = body.category;
   }
   if (body.period !== undefined) {
-    updateData.period = body.period;
+    let periodVal = body.period ? String(body.period).trim() : null;
+    if (periodVal) {
+      const match = periodVal.match(/^(\d{1,2})[./-](\d{4})$/);
+      if (match) {
+        periodVal = `${match[2]}-${String(parseInt(match[1], 10)).padStart(2, "0")}`;
+      }
+    }
+    updateData.period = periodVal;
   }
   if (body.amount !== undefined) {
     updateData.amount = parseFloat(body.amount);

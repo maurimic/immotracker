@@ -60,6 +60,14 @@ export async function POST(request: Request) {
     }
   }
 
+  let periodVal = body.period ? String(body.period).trim() : null;
+  if (periodVal) {
+    const match = periodVal.match(/^(\d{1,2})[./-](\d{4})$/);
+    if (match) {
+      periodVal = `${match[2]}-${String(parseInt(match[1], 10)).padStart(2, "0")}`;
+    }
+  }
+
   const payment = await prisma.payment.create({
     data: {
       tenantId: body.tenantId || null,
@@ -74,7 +82,7 @@ export async function POST(request: Request) {
       matchConfidence: body.matchConfidence,
       category: body.category || "RENT",
       status: body.status || "MATCHED",
-      period: body.period,
+      period: periodVal,
       sheetsRowId: body.sheetsRowId,
     },
     include: {
