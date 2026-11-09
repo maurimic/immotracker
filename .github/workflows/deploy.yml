@@ -1,0 +1,27 @@
+name: Auto Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy Immotracker on Server
+        run: |
+          echo "🚀 Starting automated deployment on $(hostname)..."
+          cd /opt/immotracker
+          
+          echo "📥 Pulling latest changes from GitHub..."
+          git pull origin main
+          
+          echo "🔨 Building updated Docker images in background..."
+          docker compose build
+          
+          echo "🔄 Restarting containers with zero downtime..."
+          docker compose up -d --remove-orphans
+          
+          echo "✅ Deployment completed successfully!"
