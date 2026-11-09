@@ -138,6 +138,54 @@ export function formatDate(date: Date | string, options?: Intl.DateTimeFormatOpt
 }
 
 /**
+ * Berechnet eine relative deutsche Zeitangabe für ein Datum (z.B. "heute", "gestern", "vor 3 Tagen", "vor einer Woche")
+ */
+export function formatRelativeDate(inputDate?: string | Date | null, baseDate = new Date()): string | null {
+  if (!inputDate) return null;
+
+  let d: Date | null = null;
+  if (inputDate instanceof Date) {
+    d = isNaN(inputDate.getTime()) ? null : inputDate;
+  } else if (typeof inputDate === "string") {
+    const iso = parseDateToISO(inputDate);
+    if (iso) {
+      const [y, m, day] = iso.split("-").map(Number);
+      d = new Date(y, m - 1, day);
+    } else {
+      const parsed = new Date(inputDate);
+      d = isNaN(parsed.getTime()) ? null : parsed;
+    }
+  }
+
+  if (!d) return null;
+
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+
+  const diffMs = today.getTime() - target.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    if (diffDays === -1) return "morgen";
+    return `in ${Math.abs(diffDays)} Tagen`;
+  }
+  if (diffDays === 0) return "heute";
+  if (diffDays === 1) return "gestern";
+  if (diffDays === 2) return "vor 2 Tagen";
+  if (diffDays >= 3 && diffDays <= 6) return `vor ${diffDays} Tagen`;
+  if (diffDays >= 7 && diffDays <= 13) return "vor einer Woche";
+  if (diffDays >= 14 && diffDays <= 20) return "vor 2 Wochen";
+  if (diffDays >= 21 && diffDays <= 27) return "vor 3 Wochen";
+  if (diffDays >= 28 && diffDays <= 34) return "vor 4 Wochen";
+  if (diffDays >= 35 && diffDays <= 59) return "vor einem Monat";
+  if (diffDays >= 60 && diffDays <= 365) {
+    const months = Math.floor(diffDays / 30);
+    return `vor ${months} Monaten`;
+  }
+  return "vor über einem Jahr";
+}
+
+/**
  * Formatiert ein Datum als Monats-String z.B. "Oktober 2026"
  */
 export function formatMonth(date: Date | string): string {

@@ -50,6 +50,7 @@ import {
   formatDate,
   formatYearsAndMonthsShort,
   formatYearsAndMonthsLong,
+  formatRelativeDate,
 } from "@/lib/utils";
 
 interface DashboardData {
@@ -500,9 +501,18 @@ export default function DashboardPage() {
                   {data.accountBalance ? formatCurrency(data.accountBalance.amount) : "–"}
                 </p>
                 <p className="text-indigo-100 text-xs mt-1">
-                  {data.accountBalance
-                    ? `Stand: ${data.accountBalance.formattedDate}`
-                    : "Wird geladen..."}
+                  {data.accountBalance ? (
+                    <>
+                      Stand: {data.accountBalance.formattedDate}
+                      {formatRelativeDate(data.accountBalance.date || data.accountBalance.formattedDate) && (
+                        <span className="opacity-90 ml-1">
+                          ({formatRelativeDate(data.accountBalance.date || data.accountBalance.formattedDate)})
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    "Wird geladen..."
+                  )}
                 </p>
               </div>
               <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">

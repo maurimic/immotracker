@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatCurrency, formatDate, currentPeriod } from "@/lib/utils";
+import { formatCurrency, formatDate, currentPeriod, formatRelativeDate } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { getRentForPeriod } from "@/lib/rent-history";
 import { RentAdjustmentDialog } from "@/components/RentAdjustmentDialog";
@@ -431,6 +431,8 @@ function N8nBankSyncButtons({
         const balAmount = data.accountBalance?.amount;
         const balDate = data.accountBalance?.formattedDate;
         const balStr = typeof balAmount === "number" ? formatCurrency(balAmount) : null;
+        const relDate = balDate ? formatRelativeDate(data.accountBalance?.date || balDate) : null;
+        const relDateSuffix = relDate ? ` (${relDate})` : "";
 
         // Prüfen, ob Kontostand oder Datum sich geändert haben
         const dateOrAmountChanged =
@@ -448,7 +450,7 @@ function N8nBankSyncButtons({
         if (data.imported > 0) {
           toast({
             title: `Bankbuchungen aktualisiert (${accountName})`,
-            description: `${data.imported} neue Buchung(en) aus Google Sheets eingelesen (${data.matched} zugeordnet). Kontostand: ${balStr || "–"} (Stand: ${balDate || "–"}).`,
+            description: `${data.imported} neue Buchung(en) aus Google Sheets eingelesen (${data.matched} zugeordnet). Kontostand: ${balStr || "–"} (Stand: ${balDate || "–"}${relDateSuffix}).`,
           });
           if (onSyncComplete) onSyncComplete(data.accountBalance);
           setIsSyncingSheet(false);
@@ -458,7 +460,7 @@ function N8nBankSyncButtons({
           // Neuer Kontostand / neues Datum im Google Sheet erkannt!
           toast({
             title: `Kontostand aktualisiert (${accountName})`,
-            description: `Neuer Kontostand: ${balStr || "–"} (Stand: ${balDate || "–"}). Keine neuen Bankumsätze.`,
+            description: `Neuer Kontostand: ${balStr || "–"} (Stand: ${balDate || "–"}${relDateSuffix}). Keine neuen Bankumsätze.`,
           });
           if (onSyncComplete) onSyncComplete(data.accountBalance);
           setIsSyncingSheet(false);
@@ -468,7 +470,7 @@ function N8nBankSyncButtons({
           // Kontostand ist bereits tagesaktuell!
           toast({
             title: `Google Sheet ist aktuell (${accountName})`,
-            description: `Kontostand ist tagesaktuell: ${balStr || "–"} (Stand: ${balDate}). Keine neuen Bankumsätze (${data.skipped || 0} Buchungen synchron).`,
+            description: `Kontostand ist tagesaktuell: ${balStr || "–"} (Stand: ${balDate} (heute)). Keine neuen Bankumsätze (${data.skipped || 0} Buchungen synchron).`,
           });
           if (onSyncComplete) onSyncComplete(data.accountBalance);
           setIsSyncingSheet(false);
@@ -488,7 +490,7 @@ function N8nBankSyncButtons({
         } else {
           toast({
             title: `Google Sheet geprüft (${accountName})`,
-            description: `Aktueller Stand im Sheet: ${balStr || "–"} (Stand: ${balDate || "–"}). Keine neueren Buchungen gefunden.`,
+            description: `Aktueller Stand im Sheet: ${balStr || "–"} (Stand: ${balDate || "–"}${relDateSuffix}). Keine neueren Buchungen gefunden.`,
           });
           if (onSyncComplete) onSyncComplete(data.accountBalance);
           setIsSyncingSheet(false);
@@ -3073,11 +3075,28 @@ function ZahlungenContent() {
             </p>
             <p
               className="text-[11px] text-muted-foreground mt-0.5 truncate"
-              title={accountBalance ? `Stand: ${accountBalance.formattedDate}` : undefined}
+              title={
+                accountBalance
+                  ? `Stand: ${accountBalance.formattedDate}${
+                      formatRelativeDate(accountBalance.date || accountBalance.formattedDate)
+                        ? ` (${formatRelativeDate(accountBalance.date || accountBalance.formattedDate)})`
+                        : ""
+                    }`
+                  : undefined
+              }
             >
-              {accountBalance
-                ? `Stand: ${accountBalance.formattedDate}`
-                : "Wird geladen..."}
+              {accountBalance ? (
+                <>
+                  Stand: {accountBalance.formattedDate}
+                  {formatRelativeDate(accountBalance.date || accountBalance.formattedDate) && (
+                    <span className="font-medium text-foreground/80 dark:text-foreground/70 ml-1">
+                      ({formatRelativeDate(accountBalance.date || accountBalance.formattedDate)})
+                    </span>
+                  )}
+                </>
+              ) : (
+                "Wird geladen..."
+              )}
             </p>
           </CardContent>
         </Card>
