@@ -658,9 +658,9 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Mietstatus je Wohnung */}
         <Card
-          onClick={() => router.push("/wohnungen")}
+          onClick={() => router.push("/zahlungen?tab=status")}
           className="transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl cursor-pointer group"
-          title="Klicken für Wohnungs- und Mieterakten"
+          title="Klicken für Zahlungsströme & Mieteingangsstatus"
         >
           <CardHeader>
             <div className="flex items-center justify-between">
