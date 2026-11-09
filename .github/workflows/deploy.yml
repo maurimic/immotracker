@@ -12,16 +12,16 @@ jobs:
     steps:
       - name: Deploy Immotracker on Server
         run: |
-          echo "🚀 Starting automated deployment on $(hostname)..."
+          echo "Starting automated deployment on $(hostname)..."
           cd /opt/immotracker
           
-          echo "📥 Pulling latest changes from GitHub..."
+          echo "Pulling latest changes from GitHub..."
           git pull origin main
           
-          echo "🔨 Building updated Docker images in background..."
+          echo "Building updated Docker images in background..."
           docker compose build
           
-          echo "🔄 Restarting containers with zero downtime..."
+          echo "Restarting containers with zero downtime..."
           docker compose up -d --remove-orphans
           
-          echo "✅ Deployment completed successfully!"
+          echo "Deployment completed successfully!"
