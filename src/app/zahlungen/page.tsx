@@ -573,14 +573,14 @@ function N8nBankSyncButtons({
   };
 
   return (
-    <div className="inline-flex items-center gap-1 p-0.5 rounded-lg border border-border/60 bg-muted/20 shrink-0">
-      {/* Button Maurizio - Feste Breite w-[168px] stellt vollen Namen ohne Abschneiden dar */}
+    <div className="flex sm:inline-flex w-full sm:w-auto items-center gap-1 p-0.5 rounded-lg border border-border/60 bg-muted/20">
+      {/* Button Maurizio - Responsive: flex-1 auf Handy, feste Breite w-[168px] auf PC */}
       <Button
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("maurizio")}
         disabled={loadingAccount === "steven" || (activeAccount === "steven" && autoSyncCountdown !== null)}
-        className={`h-8 w-[168px] px-2.5 gap-1.5 text-xs font-medium transition-colors ${
+        className={`h-8 flex-1 sm:flex-initial sm:w-[168px] px-2 sm:px-2.5 gap-1.5 text-xs font-medium transition-colors ${
           activeAccount === "maurizio" && autoSyncCountdown !== null
             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
             : "hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 text-foreground"
@@ -594,25 +594,25 @@ function N8nBankSyncButtons({
         {activeAccount === "maurizio" && autoSyncCountdown !== null ? (
           <>
             <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500 shrink-0" />
-            <span className="whitespace-nowrap font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
+            <span className="whitespace-nowrap truncate font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
           </>
         ) : (
           <>
             <Smartphone className={`h-3.5 w-3.5 shrink-0 ${loadingAccount === "maurizio" ? "animate-spin text-amber-500" : "text-amber-600 dark:text-amber-400"}`} />
-            <span className="whitespace-nowrap">{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
+            <span className="whitespace-nowrap truncate">{loadingAccount === "maurizio" ? "Startet..." : "Comdirect Maurizio"}</span>
           </>
         )}
       </Button>
 
-      <span className="h-4 w-[1px] bg-border/80" />
+      <span className="h-4 w-[1px] bg-border/80 shrink-0" />
 
-      {/* Button Steven - Feste Breite w-[168px] stellt vollen Namen ohne Abschneiden dar */}
+      {/* Button Steven - Responsive: flex-1 auf Handy, feste Breite w-[168px] auf PC */}
       <Button
         variant="ghost"
         size="sm"
         onClick={() => triggerSync("steven")}
         disabled={loadingAccount === "maurizio" || (activeAccount === "maurizio" && autoSyncCountdown !== null)}
-        className={`h-8 w-[168px] px-2.5 gap-1.5 text-xs font-medium transition-colors ${
+        className={`h-8 flex-1 sm:flex-initial sm:w-[168px] px-2 sm:px-2.5 gap-1.5 text-xs font-medium transition-colors ${
           activeAccount === "steven" && autoSyncCountdown !== null
             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
             : "hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 text-foreground"
@@ -626,12 +626,12 @@ function N8nBankSyncButtons({
         {activeAccount === "steven" && autoSyncCountdown !== null ? (
           <>
             <RefreshCw className="h-3.5 w-3.5 animate-spin text-emerald-500 shrink-0" />
-            <span className="whitespace-nowrap font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
+            <span className="whitespace-nowrap truncate font-semibold">{isSyncingSheet ? "Lese Sheet..." : `Sync in ${autoSyncCountdown}s ⚡`}</span>
           </>
         ) : (
           <>
             <Smartphone className={`h-3.5 w-3.5 shrink-0 ${loadingAccount === "steven" ? "animate-spin text-indigo-500" : "text-indigo-600 dark:text-indigo-400"}`} />
-            <span className="whitespace-nowrap">{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
+            <span className="whitespace-nowrap truncate">{loadingAccount === "steven" ? "Startet..." : "Comdirect Steven"}</span>
           </>
         )}
       </Button>
@@ -1215,7 +1215,7 @@ function EditPaymentDialog({
             </div>
             <div className="flex justify-between items-start">
               <span className="text-muted-foreground font-medium">Auftraggeber:</span>
-              <span className="font-semibold text-right max-w-[260px] truncate">{payment.payerName || "–"}</span>
+              <span className="font-semibold text-right max-w-[180px] sm:max-w-[260px] truncate">{payment.payerName || "–"}</span>
             </div>
             {payment.payerIban && (
               <div className="flex justify-between items-center">
@@ -1769,7 +1769,7 @@ function SplitPaymentDialog({
             </div>
             <div className="flex justify-between items-start text-xs">
               <span className="text-muted-foreground">Auftraggeber / Payer:</span>
-              <span className="font-semibold text-right max-w-[320px] truncate">{payment.payerName || "–"}</span>
+              <span className="font-semibold text-right max-w-[180px] sm:max-w-[320px] truncate">{payment.payerName || "–"}</span>
             </div>
             {payment.reference && (
               <div className="pt-1 border-t text-[11px] text-muted-foreground">
@@ -2982,18 +2982,18 @@ function ZahlungenContent() {
   const overpaidCount = displayedMonthStatus.filter((m) => m.status === "OVERPAID").length;
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
       {/* Header mit Titel & Aktionen */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight">Zahlungsströme & Bankabgleich</h1>
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs gap-1 py-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Zahlungsströme & Bankabgleich</h1>
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 text-xs gap-1 py-0.5 shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Google Sheets Live
             </Badge>
           </div>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
             Automatischer Soll-/Ist-Vergleich, Bank-Import aus „Kontobewegung“ & 1-Klick Mahnwesen
           </p>
         </div>
@@ -3020,7 +3020,7 @@ function ZahlungenContent() {
 
           {/* Monats- / Zeitraums-Auswahl */}
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-44 h-9">
+            <SelectTrigger className="w-full sm:w-44 h-9">
               <Calendar className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
               <SelectValue />
             </SelectTrigger>
@@ -3219,19 +3219,19 @@ function ZahlungenContent() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <TabsList className="grid grid-cols-2 w-[480px] max-w-full h-10 p-1">
-            <TabsTrigger value="status" className="px-3 text-xs sm:text-sm font-medium whitespace-nowrap">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <TabsList className="grid grid-cols-2 w-full sm:w-[480px] max-w-full h-10 p-1">
+            <TabsTrigger value="status" className="px-2 sm:px-3 text-xs sm:text-sm font-medium whitespace-nowrap">
               Mieteingangsstatus ({displayedMonthStatus.length})
             </TabsTrigger>
-            <TabsTrigger value="buchungen" className="px-3 text-xs sm:text-sm font-medium whitespace-nowrap">
+            <TabsTrigger value="buchungen" className="px-2 sm:px-3 text-xs sm:text-sm font-medium whitespace-nowrap">
               Bankumsätze ({displayedPayments.length})
             </TabsTrigger>
           </TabsList>
 
           {/* Universelle Suche & Filter für beide Tabs (Mieteingangsstatus & Bankumsätze) */}
-          <div className="flex items-center gap-2">
-            <div className="relative w-56 md:w-80">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-56 md:w-80">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="Mieter, Wohnung, Zweck, Status..."
@@ -3549,7 +3549,7 @@ function ZahlungenContent() {
                     </Badge>
                   )}
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-44 h-8 text-xs">
+                    <SelectTrigger className="w-full sm:w-44 h-8 text-xs">
                       <SelectValue placeholder="Kategorie" />
                     </SelectTrigger>
                     <SelectContent>

@@ -518,7 +518,7 @@ function EditPropertyDialog({
                 required
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Wohnfläche (m²) *</Label>
                 <Input
@@ -937,7 +937,7 @@ function AddTenantDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Mietbeginn / Einzug *</Label>
               <DateInput
@@ -1295,7 +1295,7 @@ function EditTenantDialog({
               </label>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Einzugsdatum</Label>
               <DateInput value={form.moveInDate} onChange={(e) => setForm({ ...form, moveInDate: e.target.value })} />
@@ -1688,16 +1688,16 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
     <Card className="hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
       <CardContent className="pt-5 pb-5 space-y-4">
         {/* Header mit Titel, Adresse, m² & Aktions-Buttons */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md flex-shrink-0">
               <Building2 className="h-5 w-5" />
             </div>
-            <div>
-              <h3 className="font-semibold text-sm leading-tight">{property.name}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">{property.address}</p>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm leading-tight truncate">{property.name}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">{property.address}</p>
               {(property.floor || property.rooms) && (
-                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5 truncate">
                   {property.floor ? `${property.floor}` : ""}
                   {property.floor && property.rooms ? " · " : ""}
                   {property.rooms ? `${property.rooms} Zimmer` : ""}
@@ -1705,7 +1705,7 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <div className="text-right mr-1">
               <span className="text-xs font-semibold">{property.sqm} m²</span>
               <span className="block text-[11px] text-muted-foreground">{sqmRent} €/m²</span>
@@ -2419,7 +2419,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 required
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Wohnfläche (m²) *</Label>
                 <Input
@@ -2712,7 +2712,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Mietbeginn / Einzug</Label>
                   <DateInput
@@ -2931,7 +2931,7 @@ function PortfolioKaufwertInfoDialog({
                 <p>Portfolio-Kaufwert ÷ Jahreskaltmiete {multiplier ? `(= ${multiplier} Jahreskaltmieten)` : ""}.</p>
               </div>
               {avgSqmPrice && (
-                <div className="col-span-2">
+                <div className="md:col-span-2">
                   <strong className="text-foreground">Durchschnittlicher m²-Kaufpreis:</strong>
                   <p>Portfolio-Kaufwert ÷ {totalSqm.toFixed(1)} m² Gesamtwohnfläche = ca. {avgSqmPrice.toLocaleString("de-DE")} €/m².</p>
                 </div>
@@ -3077,23 +3077,25 @@ export default function WohnungenPage() {
     );
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Objekt- & Mieterakten</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-xl sm:text-2xl font-bold">Objekt- & Mieterakten</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             {properties.length} {properties.length === 1 ? "Wohnung" : "Wohnungen"} im Portfolio · Kaufpreise, Mietverträge & Renditen
           </p>
         </div>
-        <AddPropertyDialog onRefresh={fetchData} />
+        <div className="self-start sm:self-auto">
+          <AddPropertyDialog onRefresh={fetchData} />
+        </div>
       </div>
 
       {/* Zusammenfassung KPI */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Vermietungsquote</p>
-            <p className="text-2xl font-bold text-green-500">
+            <p className="text-xl sm:text-2xl font-bold text-green-500">
               {properties.length > 0
                 ? (((properties.length - vacancies) / properties.length) * 100).toFixed(0)
                 : 0}
@@ -3108,7 +3110,7 @@ export default function WohnungenPage() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Kaltmiete gesamt / Monat</p>
-            <p className="text-2xl font-bold">{formatCurrency(totalColdRent)}</p>
+            <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalColdRent)}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Warm: {formatCurrency(totalRent)}
             </p>
@@ -3131,7 +3133,7 @@ export default function WohnungenPage() {
                 />
               )}
             </div>
-            <p className="text-2xl font-bold text-primary">
+            <p className="text-xl sm:text-2xl font-bold text-primary">
               {totalPurchaseValue > 0 ? formatCurrency(totalPurchaseValue) : `${totalSqm.toFixed(1)} m²`}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -3144,14 +3146,14 @@ export default function WohnungenPage() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Geplante Mietanpassungen</p>
-            <p className="text-2xl font-bold text-blue-500">{allAdjustments.length}</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-500">{allAdjustments.length}</p>
             <p className="text-xs text-muted-foreground mt-0.5">Staffel- & Indexmieten</p>
           </CardContent>
         </Card>
       </div>
 
       <Tabs defaultValue="akten">
-        <TabsList>
+        <TabsList className="w-full sm:w-auto justify-start overflow-x-auto">
           <TabsTrigger value="akten" className="gap-1.5">
             <Building2 className="h-4 w-4" /> Wohnungs- & Mieterakten ({properties.length})
           </TabsTrigger>

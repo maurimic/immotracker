@@ -158,11 +158,11 @@ export default function BackupPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Backup, Restore & Rohdaten-Export</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-xl sm:text-2xl font-bold">Backup, Restore & Rohdaten-Export</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             100% offline & lokal: Vollständige Datensicherung, Excel-CSVs & Disaster-Recovery
           </p>
         </div>
@@ -354,12 +354,12 @@ export default function BackupPage() {
               {backups.map((backup) => (
                 <div
                   key={backup.name}
-                  className="flex items-center justify-between p-3 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 bg-secondary/30 rounded-lg hover:bg-secondary/50 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Archive className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium font-mono">{backup.name}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium font-mono truncate">{backup.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {formatDate(backup.created, {
                           day: "2-digit",
@@ -371,7 +371,7 @@ export default function BackupPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                     <a
                       href={`/api/backup/${encodeURIComponent(backup.name)}`}
                       download={backup.name}

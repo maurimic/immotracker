@@ -189,8 +189,8 @@ function AddLoanDialog({
           </CardDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2 col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="space-y-2 sm:col-span-2">
               <Label className="text-xs">Wohnung *</Label>
               <Select
                 value={form.propertyId}
@@ -280,8 +280,8 @@ function AddLoanDialog({
                 required
               />
             </div>
-            <div className="space-y-1 col-span-2">
-              <div className="flex items-center justify-between">
+            <div className="space-y-1 sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
                 <Label className="text-xs">
                   Aktuelle Restschuld (€)
                   {autoCalculated && (
@@ -317,7 +317,7 @@ function AddLoanDialog({
                 Berechnet aus Startdatum bis heute. Sie können den Betrag bei Bedarf manuell anpassen.
               </p>
             </div>
-            <div className="space-y-1 col-span-2">
+            <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Zinsbindungsende *</Label>
               <DateInput
                 value={form.fixedRateEnd}
@@ -414,8 +414,8 @@ function EditLoanDialog({
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1 col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Zugeordnete Wohnung *</Label>
               <Select
                 value={form.propertyId}
@@ -500,8 +500,8 @@ function EditLoanDialog({
                 required
               />
             </div>
-            <div className="space-y-1 col-span-2">
-              <div className="flex items-center justify-between">
+            <div className="space-y-1 sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-1">
                 <Label className="text-xs">Aktuelle Restschuld (€) *</Label>
                 <div className="flex items-center gap-2">
                   {form.currentBalance && !isNaN(parseFloat(form.currentBalance)) && (
@@ -526,7 +526,7 @@ function EditLoanDialog({
                 required
               />
             </div>
-            <div className="space-y-1 col-span-2">
+            <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">Zinsbindungsende *</Label>
               <DateInput
                 value={form.fixedRateEnd}
@@ -780,7 +780,7 @@ function VolltilgerCalculator({
       {/* Configuration Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center justify-between">
+          <CardTitle className="text-base flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
               Volltilger- & Anschlussfinanzierungs-Rechner
@@ -1169,15 +1169,17 @@ function KrediteContent() {
     .filter((x) => x.frs.color === "red" || x.frs.color === "yellow");
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Darlehens- & Cashflow-Management</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-xl sm:text-2xl font-bold">Darlehens- & Cashflow-Management</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             Annuitäten, Darlehensstart, Zinsbindung-Ampel, Sondertilgungs-Tracker & echter Netto-Cashflow
           </p>
         </div>
-        <AddLoanDialog properties={properties} onRefresh={fetchData} />
+        <div className="self-start sm:self-auto">
+          <AddLoanDialog properties={properties} onRefresh={fetchData} />
+        </div>
       </div>
 
       {/* Prominentes Zinsbindungs-Warnbanner falls Kredite < 36 Monate oder abgelaufen */}
@@ -1246,11 +1248,11 @@ function KrediteContent() {
       )}
 
       {/* KPI-Banner */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <Card className="stat-card-success text-white border-0">
           <CardContent className="pt-4 pb-4">
             <p className="text-green-100 text-xs mb-1">Getilgtes Vermögen</p>
-            <p className="text-2xl font-bold">{formatCurrency(totalRepaid)}</p>
+            <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalRepaid)}</p>
             <p className="text-green-100 text-xs mt-1">
               {totalOriginal > 0
                 ? ((totalRepaid / totalOriginal) * 100).toFixed(1)
@@ -1262,7 +1264,7 @@ function KrediteContent() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Offene Restschuld gesamt</p>
-            <p className="text-2xl font-bold text-orange-500">
+            <p className="text-xl sm:text-2xl font-bold text-orange-500">
               {formatCurrency(totalBalance)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -1273,7 +1275,7 @@ function KrediteContent() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Monatliche Annuität gesamt</p>
-            <p className="text-2xl font-bold">{formatCurrency(totalLoanRate)}</p>
+            <p className="text-xl sm:text-2xl font-bold">{formatCurrency(totalLoanRate)}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {formatCurrency(totalPrincipal)} Tilgung · {formatCurrency(totalInterest)} Zins
             </p>
@@ -1288,7 +1290,7 @@ function KrediteContent() {
               </Badge>
             </div>
             <p
-              className={`text-2xl font-bold ${
+              className={`text-xl sm:text-2xl font-bold ${
                 totalNetCashflow >= 0 ? "text-green-500" : "text-red-500"
               }`}
             >
@@ -1306,7 +1308,7 @@ function KrediteContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
+        <TabsList className="w-full sm:w-auto justify-start overflow-x-auto">
           <TabsTrigger value="darlehen" className="gap-1.5">
             <Landmark className="h-4 w-4" /> Darlehensübersicht & Tilgung ({loans.length})
           </TabsTrigger>

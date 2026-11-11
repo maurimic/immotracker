@@ -217,12 +217,12 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
             Übersicht · {new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
           </p>
         </div>
@@ -262,7 +262,7 @@ export default function DashboardPage() {
                         {data.overduePayments.map((op) => (
                           <div
                             key={op.propertyId}
-                            className="p-3 rounded-lg border border-orange-500/30 bg-orange-500/10 flex items-center justify-between gap-3"
+                            className="p-3 rounded-lg border border-orange-500/30 bg-orange-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                           >
                             <div className="min-w-0">
                               <p className="font-semibold text-sm truncate">{op.propertyName}</p>
@@ -302,7 +302,7 @@ export default function DashboardPage() {
                         {data.redFixedRates.map((rf) => (
                           <div
                             key={rf.loanId}
-                            className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 flex items-center justify-between gap-3"
+                            className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                           >
                             <div className="min-w-0">
                               <p className="font-semibold text-sm truncate">
@@ -343,7 +343,7 @@ export default function DashboardPage() {
                         {highTickets.map((t) => (
                           <div
                             key={t.id}
-                            className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 flex items-center justify-between gap-3"
+                            className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                           >
                             <div className="min-w-0">
                               <p className="font-semibold text-sm truncate">{t.title}</p>
@@ -379,7 +379,7 @@ export default function DashboardPage() {
                         {data.fifteenPercentWarnings.map((fp: any) => (
                           <div
                             key={fp.propertyId}
-                            className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 flex items-center justify-between gap-3"
+                            className="p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                           >
                             <div className="min-w-0">
                               <p className="font-semibold text-sm truncate">{fp.propertyName}</p>
@@ -430,7 +430,7 @@ export default function DashboardPage() {
                   <span>Getilgtes Kapital</span>
                   <ChevronRight className="h-4 w-4 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </div>
-                <p className="text-3xl font-bold tracking-tight">{formatCurrency(data.totalRepaid)}</p>
+                <p className="text-2xl sm:text-3xl font-bold tracking-tight">{formatCurrency(data.totalRepaid)}</p>
                 <p className="text-green-100 text-xs mt-1">von {formatCurrency(data.totalOriginal)}</p>
               </div>
               <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
@@ -465,7 +465,7 @@ export default function DashboardPage() {
                   <span>Mieteinnahmen (Ist)</span>
                   <ChevronRight className="h-4 w-4 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(data.totalIstRent)}</p>
+                <p className="text-2xl sm:text-3xl font-bold">{formatCurrency(data.totalIstRent)}</p>
                 <p className="text-blue-100 text-xs mt-1">
                   Soll: {formatCurrency(data.totalSollRent)}
                 </p>
@@ -497,7 +497,7 @@ export default function DashboardPage() {
                   <span>Kontostand</span>
                   <ChevronRight className="h-4 w-4 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </div>
-                <p className="text-3xl font-bold tracking-tight">
+                <p className="text-2xl sm:text-3xl font-bold tracking-tight">
                   {data.accountBalance ? formatCurrency(data.accountBalance.amount) : "–"}
                 </p>
                 <p className="text-indigo-100 text-xs mt-1">
@@ -535,7 +535,7 @@ export default function DashboardPage() {
                   <span>Netto-Cashflow (Operativ)</span>
                   <ChevronRight className="h-4 w-4 opacity-70 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </div>
-                <p className="text-3xl font-bold">{formatCurrency(data.netCashflow)}</p>
+                <p className="text-2xl sm:text-3xl font-bold">{formatCurrency(data.netCashflow)}</p>
                 <p className="text-xs opacity-80 mt-1">Kaltmiete − Kreditraten</p>
               </div>
               <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
@@ -672,12 +672,12 @@ export default function DashboardPage() {
           className="transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl cursor-pointer group"
           title="Klicken für Zahlungsströme & Mieteingangsstatus"
         >
-          <CardHeader>
+          <CardHeader className="pb-3 sm:pb-6">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base flex items-center gap-1.5">
                   Mieteingangskontrolle
-                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-60 sm:opacity-0 sm:group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </CardTitle>
                 <CardDescription>
                   {new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
@@ -692,7 +692,7 @@ export default function DashboardPage() {
               const pct = ps.soll > 0 ? Math.min(100, (ps.ist / ps.soll) * 100) : 0;
               return (
                 <div key={ps.propertyId} className="space-y-1.5 hover:bg-secondary/40 p-1.5 rounded-lg -mx-1.5 transition-colors">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-2 gap-y-1">
                     <div className="flex items-center gap-2 min-w-0">
                       <StatusIcon className={`h-4 w-4 flex-shrink-0 ${conf.textColor}`} />
                       <div className="min-w-0">
@@ -702,8 +702,8 @@ export default function DashboardPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <span className="text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-auto sm:ml-2">
+                      <span className="text-xs text-muted-foreground font-mono">
                         {formatCurrency(ps.ist)} / {formatCurrency(ps.soll)}
                       </span>
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -741,12 +741,12 @@ export default function DashboardPage() {
           className="transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl cursor-pointer group"
           title="Klicken für Zinsbindungskontrolle & Anschlussfinanzierung"
         >
-          <CardHeader>
+          <CardHeader className="pb-3 sm:pb-6">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base flex items-center gap-1.5">
                   Zinsbindungs-Ampel
-                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-60 sm:opacity-0 sm:group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                 </CardTitle>
                 <CardDescription>Restlaufzeit der Zinsbindungen</CardDescription>
               </div>
@@ -761,11 +761,11 @@ export default function DashboardPage() {
                 "bg-red-500 animate-pulse";
               return (
                 <div key={fs.loanId} className="space-y-1 py-1.5 border-b border-border/50 last:border-0 hover:bg-secondary/40 p-1.5 rounded-lg -mx-1.5 transition-colors">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-2 gap-y-1">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor}`} />
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                           <p className="text-sm font-semibold truncate text-foreground">
                             {fs.propertyName || fs.label}
                           </p>
@@ -780,7 +780,7 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2.5 flex-shrink-0 ml-2">
+                    <div className="flex items-center gap-2.5 flex-shrink-0 ml-auto sm:ml-2">
                       <div className="text-right">
                         <p className="text-xs font-bold text-foreground">
                           {formatCurrency(fs.originalAmount)}

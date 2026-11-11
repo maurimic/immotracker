@@ -466,11 +466,11 @@ export default function NebenkostenPage() {
   const totalNotAllocatable = notAllocatable.reduce((s, b) => s + b.amount, 0);
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Nebenkosten & Betriebskostenabrechnung</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-xl sm:text-2xl font-bold">Nebenkosten & Betriebskostenabrechnung</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             Gesamtkosten-Erfassung, Umlageschlüssel & 1-Klick PDF-Abrechnungsgenerator
           </p>
         </div>
@@ -531,7 +531,7 @@ export default function NebenkostenPage() {
       {statements.length > 0 && (
         <Card className="border-2 border-primary/30 shadow-md">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-500" />
@@ -541,7 +541,7 @@ export default function NebenkostenPage() {
                   Rechtskonform nach Wohnflächenanteil (qm) berechnet inkl. Vorauszahlungsabgleich
                 </CardDescription>
               </div>
-              <Badge variant="success" className="text-xs">
+              <Badge variant="success" className="text-xs self-start sm:self-auto shrink-0">
                 {statements.length} Einheiten berechnet
               </Badge>
             </div>
@@ -600,14 +600,14 @@ export default function NebenkostenPage() {
       {/* Erfasste Betriebskosten-Rechnungen */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <CardTitle className="text-base">Erfasste Betriebskosten-Buchungen {period}</CardTitle>
               <CardDescription>
                 Heizung, Wasser, Versicherung, Müllabfuhr, Allgemeinstrom und sonstige Dienstleister
               </CardDescription>
             </div>
-            <Badge variant="outline" className="text-xs font-mono">
+            <Badge variant="outline" className="text-xs font-mono self-start sm:self-auto shrink-0">
               {filteredBills.length} Rechnung{filteredBills.length !== 1 ? "en" : ""}
             </Badge>
           </div>

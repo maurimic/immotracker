@@ -299,7 +299,7 @@ export function RentAdjustmentDialog({
               </Badge>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Wirksam ab (Stichtag) *</Label>
                 <DateInput
@@ -329,7 +329,7 @@ export function RentAdjustmentDialog({
             </div>
 
             {/* Gegenüberstellung Vorher vs. Nachher */}
-            <div className="grid grid-cols-2 gap-4 p-3 bg-background rounded-lg border">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-background rounded-lg border">
               {/* Vorher */}
               <div className="space-y-2">
                 <span className="text-xs font-semibold text-muted-foreground block border-b pb-1">

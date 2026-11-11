@@ -696,16 +696,16 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
   };
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
       {/* ─── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
               <ReceiptText className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Steuern & Anlage V</h1>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Steuern & Anlage V</h1>
               <p className="text-xs text-muted-foreground">
                 Amtliche Anlage V (Einkommensteuer) & Feststellungserklärung (ESt 1 B / Anlage FB) für Ihre {properties.length} Mieteinheiten
               </p>
@@ -856,24 +856,24 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
 
       {/* ─── Main Tabs ──────────────────────────────────────────────────────── */}
       <Tabs defaultValue="anlage-v" className="w-full space-y-4">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 h-auto p-1 bg-secondary/50">
-          <TabsTrigger value="anlage-v" className="gap-1.5 py-2">
-            <FileSpreadsheet className="h-4 w-4" /> Anlage V (ESt)
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 h-auto p-1 bg-secondary/50 gap-1">
+          <TabsTrigger value="anlage-v" className="gap-1.5 py-2 px-2 text-xs sm:text-sm whitespace-normal text-center leading-tight h-auto">
+            <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span>Anlage V (ESt)</span>
           </TabsTrigger>
-          <TabsTrigger value="feststellung" className="gap-1.5 py-2">
-            <Users className="h-4 w-4" /> Feststellungserklärung
+          <TabsTrigger value="feststellung" className="gap-1.5 py-2 px-2 text-xs sm:text-sm whitespace-normal text-center leading-tight h-auto">
+            <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span>Feststellung</span>
           </TabsTrigger>
-          <TabsTrigger value="objekte" className="gap-1.5 py-2">
-            <Building2 className="h-4 w-4" /> Objektweise Aufstellung
+          <TabsTrigger value="objekte" className="gap-1.5 py-2 px-2 text-xs sm:text-sm whitespace-normal text-center leading-tight h-auto">
+            <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span>Je Objekt</span>
           </TabsTrigger>
-          <TabsTrigger value="afa" className="gap-1.5 py-2">
-            <Calculator className="h-4 w-4" /> AfA & Abschreibung
+          <TabsTrigger value="afa" className="gap-1.5 py-2 px-2 text-xs sm:text-sm whitespace-normal text-center leading-tight h-auto">
+            <Calculator className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span>AfA & Abschreibung</span>
           </TabsTrigger>
-          <TabsTrigger value="15prozent" className="gap-1.5 py-2">
-            <ShieldAlert className="h-4 w-4 text-amber-500" /> 15%-Grenzen Monitor
+          <TabsTrigger value="15prozent" className="gap-1.5 py-2 px-2 text-xs sm:text-sm whitespace-normal text-center leading-tight h-auto">
+            <ShieldAlert className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-amber-500" /> <span>15%-Grenze</span>
           </TabsTrigger>
-          <TabsTrigger value="tipps" className="gap-1.5 py-2">
-            <Sparkles className="h-4 w-4" /> Tipps & Fristen
+          <TabsTrigger value="tipps" className="gap-1.5 py-2 px-2 text-xs sm:text-sm whitespace-normal text-center leading-tight h-auto">
+            <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" /> <span>Tipps & Fristen</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1166,7 +1166,7 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
 
               {/* Zusätzliche Parameter Feineinstellung */}
               <div className="p-4 rounded-xl border border-border/80 bg-card/60 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <span>⚙️</span>
                     <span>Werbungskosten Feineinstellung (wird automatisch eingerechnet)</span>
@@ -1235,7 +1235,7 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
             <CardContent className="space-y-6">
               {/* Erklärung & Quoten-Status */}
               <div className="p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 text-xs space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <div className="flex items-center gap-2">
                     <Info className="h-4 w-4 text-indigo-500 flex-shrink-0" />
                     <span className="font-semibold text-foreground">
@@ -1328,7 +1328,7 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
 
               {/* Aufteilungsergebnis Tabelle */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Aufteilung des steuerlichen Gesamtergebnisses (Anlage FB)
                   </h4>
@@ -1549,7 +1549,7 @@ Mieter: ${item.tenant}
             <CardContent className="space-y-6">
               {/* AfA Parameter Konfiguration */}
               <div className="p-4 rounded-xl border border-border/80 bg-secondary/30 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <Percent className="h-4 w-4 text-primary" />
                     <span>Berechnungsparameter (Gebäudeanteil & AfA-Satz)</span>

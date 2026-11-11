@@ -322,7 +322,7 @@ function AddMeterDialog({ properties, onRefresh }: { properties: Property[]; onR
       <DialogContent>
         <DialogHeader><DialogTitle>Neuen Zählerstand erfassen</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Wohnung *</Label>
               <Select value={form.propertyId} onValueChange={(v) => setForm({ ...form, propertyId: v })}>
@@ -356,7 +356,7 @@ function AddMeterDialog({ properties, onRefresh }: { properties: Property[]; onR
               <DateInput value={form.readingDate}
                 onChange={(e) => setForm({ ...form, readingDate: e.target.value })} />
             </div>
-            <div className="space-y-2 col-span-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label>Notiz / Zählernummer</Label>
               <Input placeholder="z.B. Hauptzähler Keller Nr. 49201" value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -456,26 +456,26 @@ export default function InstandhaltungPage() {
   const doneCount = tickets.filter((t) => t.status === "DONE").length;
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+    <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Instandhaltung & Rücklagen</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-xl sm:text-2xl font-bold">Instandhaltung & Rücklagen</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm">
             Reparatur-Tickets (Kanban), Instandhaltungsrücklagen nach Peters & Zählerstände
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <AddMeterDialog properties={properties} onRefresh={fetchData} />
           <AddTicketDialog properties={properties} onRefresh={fetchData} />
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Offene Tickets</p>
-            <p className="text-2xl font-bold">
+            <p className="text-xl sm:text-2xl font-bold">
               {tickets.filter((t) => t.status !== "DONE").length}
             </p>
           </CardContent>
@@ -483,7 +483,7 @@ export default function InstandhaltungPage() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Dringend (HOCH)</p>
-            <p className="text-2xl font-bold text-red-500">
+            <p className="text-xl sm:text-2xl font-bold text-red-500">
               {tickets.filter((t) => t.priority === "HIGH" && t.status !== "DONE").length}
             </p>
           </CardContent>
@@ -491,13 +491,13 @@ export default function InstandhaltungPage() {
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Erledigte Reparaturen</p>
-            <p className="text-2xl font-bold text-green-500">{doneCount}</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-500">{doneCount}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Erledigter Gesamtaufwand</p>
-            <p className="text-2xl font-bold font-mono">
+            <p className="text-xl sm:text-2xl font-bold font-mono">
               {formatCurrency(totalCosts)}
             </p>
           </CardContent>
@@ -505,7 +505,7 @@ export default function InstandhaltungPage() {
       </div>
 
       <Tabs defaultValue="kanban">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="flex w-full overflow-x-auto justify-start sm:grid sm:grid-cols-3">
           <TabsTrigger value="kanban" className="gap-1.5">
             <Wrench className="h-4 w-4" /> Kanban-Reparaturen
           </TabsTrigger>
