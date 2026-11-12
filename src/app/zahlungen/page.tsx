@@ -2556,6 +2556,16 @@ function ZahlungenContent() {
             formattedDate: data.formattedDate,
           });
         }
+        // Wenn sich der Kontostand geändert hat und der Server neue Bankumsätze nachgezogen hat:
+        if (data.autoSyncedPayments?.triggered) {
+          await Promise.all([fetchPayments(), fetchTenants()]);
+          if ((data.autoSyncedPayments.imported ?? 0) > 0) {
+            toast({
+              title: "Kontostand & Bankumsätze aktualisiert",
+              description: `${data.autoSyncedPayments.imported} neue Buchung(en) automatisch aus Google Sheets geladen.`,
+            });
+          }
+        }
       }
     } catch (err) {
       console.error("Fehler beim Laden des Kontostands:", err);

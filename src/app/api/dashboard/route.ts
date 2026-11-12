@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { currentPeriod } from "@/lib/utils";
 import { getRentForPeriod } from "@/lib/rent-history";
-import { fetchLatestAccountBalance } from "@/lib/google-sheets";
+import { fetchBalanceAndAutoSyncPayments } from "@/lib/payment-sync";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,7 +12,7 @@ export const revalidate = 0;
  * Liefert alle KPIs für das Haupt-Dashboard
  */
 export async function GET() {
-  const [rawProperties, payments, loans, tickets, rentAdjustments, accountBalanceSetting] =
+  const [rawProperties, loans, tickets, rentAdjustments, balanceSyncResult] =
     await Promise.all([
       prisma.property.findMany({
         include: {
@@ -25,10 +25,6 @@ export async function GET() {
             orderBy: { date: "desc" },
           },
         },
-      }),
-      prisma.payment.findMany({
-        where: { period: currentPeriod() },
-        include: { tenant: true },
       }),
       prisma.loan.findMany({
         include: { property: true },
@@ -50,10 +46,13 @@ export async function GET() {
         orderBy: { effectiveDate: "asc" },
         take: 5,
       }),
-      prisma.appSetting.findUnique({
-        where: { key: "latest_account_balance" },
-      }),
+      fetchBalanceAndAutoSyncPayments({ balanceTimeoutMs: 4000 }),
     ]);
+
+  const payments = await prisma.payment.findMany({
+    where: { period: currentPeriod() },
+    include: { tenant: true },
+  });
 
   const properties = rawProperties.map((p) => ({
     ...p,
@@ -256,39 +255,8 @@ export async function GET() {
     };
   });
 
-  // ─── Kontostand aus Tabellenblatt "Kontostand" (Live oder aus Cache) ─────
-
-  let accountBalance: { amount: number; date: string; formattedDate: string } | null = null;
-  if (accountBalanceSetting) {
-    try {
-      accountBalance = JSON.parse(accountBalanceSetting.value);
-    } catch {}
-  }
-
-  try {
-    const livePromise = fetchLatestAccountBalance();
-    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500));
-    const live = await Promise.race([livePromise, timeoutPromise]);
-    if (live) {
-      accountBalance = {
-        amount: live.amount,
-        date: live.date.toISOString(),
-        formattedDate: live.formattedDate,
-      };
-      await prisma.appSetting.upsert({
-        where: { key: "latest_account_balance" },
-        create: {
-          key: "latest_account_balance",
-          value: JSON.stringify(accountBalance),
-        },
-        update: {
-          value: JSON.stringify(accountBalance),
-        },
-      });
-    }
-  } catch (err) {
-    // Bei Timeout oder Offline-Betrieb bleibt der gecachte Kontostand aktiv
-  }
+  // ─── Kontostand aus Tabellenblatt "Kontostand" (Live & Auto-Sync) ────────
+  const accountBalance = balanceSyncResult.accountBalance;
 
   // ─── Historische Cashflow-Daten (letzte 6 Monate) ────────────────────────
 
