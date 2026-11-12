@@ -57,6 +57,43 @@ export async function ensureSchema() {
       );
     }
 
+    // Standard-Wohneinheiten einmalig setzen, sofern noch nicht initialisiert
+    const seedCheck = (await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "value" FROM "app_settings" WHERE "key" = 'unit_numbers_seeded' LIMIT 1;`
+    )) || [];
+    if (seedCheck.length === 0) {
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "unitNumber" = 'WE1'
+        WHERE ("unitNumber" IS NULL OR TRIM("unitNumber") = '')
+          AND (LOWER("address") LIKE '%siemen%' OR LOWER("name") LIKE '%siemen%')
+          AND (LOWER(COALESCE("floor", '')) = 'eg' OR LOWER("name") LIKE '%eg%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "unitNumber" = 'WE5, WE6'
+        WHERE ("unitNumber" IS NULL OR TRIM("unitNumber") = '')
+          AND (LOWER("address") LIKE '%siemen%' OR LOWER("name") LIKE '%siemen%')
+          AND (LOWER(COALESCE("floor", '')) LIKE '%2%' OR LOWER("name") LIKE '%2.og%' OR LOWER("name") LIKE '%2og%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "unitNumber" = 'WE6'
+        WHERE ("unitNumber" IS NULL OR TRIM("unitNumber") = '')
+          AND (LOWER("address") LIKE '%dortmunder%' OR LOWER("name") LIKE '%schwerte%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "unitNumber" = 'Whg. 1'
+        WHERE ("unitNumber" IS NULL OR TRIM("unitNumber") = '')
+          AND (LOWER("address") LIKE '%bockum%' OR LOWER("name") LIKE '%bockum%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        INSERT OR IGNORE INTO "app_settings" ("key", "value", "updatedAt")
+        VALUES ('unit_numbers_seeded', '1', CURRENT_TIMESTAMP);
+      `);
+    }
+
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "property_investments" (
         "id" TEXT NOT NULL PRIMARY KEY,

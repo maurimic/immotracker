@@ -666,9 +666,14 @@ export function ruleBasedMatch(
     "gesellschafter",
   ];
   if (ownerKeywords.some((kw) => rowName.includes(kw) || rowRef.includes(kw))) {
+    const propCandidate = findBestMatchingProperty(rowRef, allProperties);
+    const matchedPropId =
+      propCandidate && (propCandidate.addressMatched || propCandidate.unitMatched)
+        ? propCandidate.property.id
+        : null;
     return {
       tenantId: null,
-      propertyId: null,
+      propertyId: matchedPropId,
       loanId: null,
       method: "NAME",
       confidence: 0.95,
