@@ -37,7 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatGermanPercent } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { PropertyInvestmentsDialog } from "@/components/PropertyInvestmentsDialog";
 
@@ -1243,7 +1243,7 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
                     </span>
                   </div>
                   <Badge variant={isShareValid ? "outline" : "destructive"} className="text-xs font-mono">
-                    Quoten-Summe: {totalOwnerShare.toFixed(1)}% {isShareValid ? "✓ (100% verteilt)" : "⚠️ Summe muss 100% sein"}
+                    Quoten-Summe: {formatGermanPercent(totalOwnerShare, 1)} {isShareValid ? "✓ (100% verteilt)" : "⚠️ Summe muss 100% sein"}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground leading-relaxed">

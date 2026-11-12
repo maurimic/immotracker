@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatGermanPercent } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 export interface RentAdjustmentDialogProps {
@@ -417,7 +417,7 @@ export function RentAdjustmentDialog({
                 </div>
                 <div className="text-right">
                   <Badge variant={diffWarm >= 0 ? "default" : "secondary"} className="font-mono text-xs">
-                    {prevWarm > 0 && diffWarm !== 0 ? `${((diffWarm / prevWarm) * 100).toFixed(1)}%` : "0.0%"}
+                    {prevWarm > 0 && diffWarm !== 0 ? formatGermanPercent((diffWarm / prevWarm) * 100, 1) : "0,0 %"}
                   </Badge>
                 </div>
               </div>

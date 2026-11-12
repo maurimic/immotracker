@@ -51,6 +51,8 @@ import {
   formatYearsAndMonthsShort,
   formatYearsAndMonthsLong,
   formatRelativeDate,
+  formatGermanNumber,
+  formatGermanPercent,
 } from "@/lib/utils";
 
 interface DashboardData {
@@ -440,7 +442,7 @@ export default function DashboardPage() {
             <div className="mt-3">
               <div className="flex justify-between text-xs text-green-100 mb-1">
                 <span>Tilgungsfortschritt</span>
-                <span>{data.repaidPercent.toFixed(1)}%</span>
+                <span>{formatGermanPercent(data.repaidPercent, 1)}</span>
               </div>
               <div className="bg-white/20 rounded-full h-1.5">
                 <div
@@ -616,7 +618,7 @@ export default function DashboardPage() {
                     {totalPropertyVal > 0 ? formatCurrency(netEquity) : "–"}
                   </span>
                   <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
-                    {totalPropertyVal > 0 ? `${equityPercent.toFixed(1)}% EK-Quote` : "Kaufpreise hinterlegen"}
+                    {totalPropertyVal > 0 ? `${formatGermanPercent(equityPercent, 1)} EK-Quote` : "Kaufpreise hinterlegen"}
                   </span>
                 </div>
               </div>
@@ -627,7 +629,7 @@ export default function DashboardPage() {
               <div className="flex justify-between items-center text-xs">
                 <span className="font-medium text-muted-foreground">Beleihungsauslauf (LTV):</span>
                 <span className="font-bold font-mono text-foreground">
-                  {totalPropertyVal > 0 ? `${ltvPercent.toFixed(1)}%` : "–"}
+                  {totalPropertyVal > 0 ? formatGermanPercent(ltvPercent, 1) : "–"}
                 </span>
               </div>
               {/* Zweifarbiger Split-Balken: Schulden vs. Reinvermögen */}
@@ -635,27 +637,27 @@ export default function DashboardPage() {
                 <div
                   className="bg-orange-500 h-full transition-all duration-700"
                   style={{ width: totalPropertyVal > 0 ? `${Math.min(100, ltvPercent)}%` : totalDebt > 0 ? "100%" : "0%" }}
-                  title={`Schulden: ${formatCurrency(totalDebt)} (${ltvPercent.toFixed(1)}%)`}
+                  title={`Schulden: ${formatCurrency(totalDebt)} (${formatGermanPercent(ltvPercent, 1)})`}
                 />
                 <div
                   className="bg-emerald-500 h-full transition-all duration-700"
                   style={{ width: totalPropertyVal > 0 ? `${Math.max(0, 100 - Math.min(100, ltvPercent))}%` : "0%" }}
-                  title={`Eigenkapital: ${formatCurrency(netEquity)} (${equityPercent.toFixed(1)}%)`}
+                  title={`Eigenkapital: ${formatCurrency(netEquity)} (${formatGermanPercent(equityPercent, 1)})`}
                 />
               </div>
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span className="flex items-center gap-1 font-medium text-orange-500">
-                  <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" /> Fremdkapital ({ltvPercent.toFixed(0)}%)
+                  <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" /> Fremdkapital ({formatGermanPercent(ltvPercent, 0)})
                 </span>
                 <span className="flex items-center gap-1 font-medium text-emerald-500">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Reinvermögen ({equityPercent.toFixed(0)}%)
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Reinvermögen ({formatGermanPercent(equityPercent, 0)})
                 </span>
               </div>
               {data.portfolioYield && data.portfolioYield > 0 ? (
                 <div className="pt-1.5 border-t border-border/40 flex justify-between text-[11px]">
-                  <span className="text-muted-foreground">Mietrendite: <strong className="text-foreground">{data.portfolioYield.toFixed(2)}%</strong></span>
+                  <span className="text-muted-foreground">Mietrendite: <strong className="text-foreground">{formatGermanPercent(data.portfolioYield, 2)}</strong></span>
                   {data.portfolioMultiplier && (
-                    <span className="text-muted-foreground">Faktor: <strong className="text-foreground">{data.portfolioMultiplier.toFixed(1)}x</strong></span>
+                    <span className="text-muted-foreground">Faktor: <strong className="text-foreground">{formatGermanNumber(data.portfolioMultiplier, 1)}x</strong></span>
                   )}
                 </div>
               ) : null}

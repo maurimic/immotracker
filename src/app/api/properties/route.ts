@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { safeDate } from "@/lib/utils";
+import { safeDate, parseGermanNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -72,10 +72,11 @@ export async function POST(request: Request) {
         }
       : null;
 
-    const parseOptFloat = (val: any) =>
-      val !== undefined && val !== "" && val !== null && !isNaN(parseFloat(val))
-        ? parseFloat(val)
-        : null;
+    const parseOptFloat = (val: any) => {
+      if (val === undefined || val === "" || val === null) return null;
+      const num = parseGermanNumber(val);
+      return isNaN(num) ? null : num;
+    };
 
     const pTax = parseOptFloat(body.propertyTransferTax);
     const notary = parseOptFloat(body.notaryCosts);

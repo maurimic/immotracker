@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { safeDate } from "@/lib/utils";
+import { safeDate, parseGermanNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +36,9 @@ export async function PUT(
   try {
     const body = await request.json();
 
-    const gross = body.amount !== undefined ? parseFloat(body.amount) : undefined;
+    const gross = body.amount !== undefined ? parseGermanNumber(body.amount) : undefined;
     const net = body.amountNet !== undefined && body.amountNet !== ""
-      ? parseFloat(body.amountNet)
+      ? parseGermanNumber(body.amountNet)
       : gross !== undefined
       ? Math.round((gross / 1.19) * 100) / 100
       : undefined;

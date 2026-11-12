@@ -19,7 +19,14 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  parseGermanNumber,
+  formatGermanNumber,
+  formatGermanPercent,
+  formatGermanInput,
+} from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { RentAdjustmentDialog } from "@/components/RentAdjustmentDialog";
 import { PropertyInvestmentsDialog, PropertyInvestment } from "@/components/PropertyInvestmentsDialog";
@@ -111,29 +118,29 @@ function DetailedAncillaryCostsSection({
 
   const [expanded, setExpanded] = useState<boolean>(hasDetailedValues);
 
-  const price = parseFloat(form.purchasePrice) || 0;
+  const price = parseGermanNumber(form.purchasePrice) || 0;
 
-  const pTax = parseFloat(form.propertyTransferTax) || 0;
-  const notary = parseFloat(form.notaryCosts) || 0;
-  const landReg = parseFloat(form.landRegisterCosts) || 0;
-  const broker = parseFloat(form.brokerCosts) || 0;
-  const other = parseFloat(form.otherAncillaryCosts) || 0;
+  const pTax = parseGermanNumber(form.propertyTransferTax) || 0;
+  const notary = parseGermanNumber(form.notaryCosts) || 0;
+  const landReg = parseGermanNumber(form.landRegisterCosts) || 0;
+  const broker = parseGermanNumber(form.brokerCosts) || 0;
+  const other = parseGermanNumber(form.otherAncillaryCosts) || 0;
   const detailedSum = pTax + notary + landReg + broker + other;
 
-  const currentTotal = parseFloat(form.ancillaryCosts) || 0;
+  const currentTotal = parseGermanNumber(form.ancillaryCosts) || 0;
 
   const updateDetailedField = (field: string, value: string) => {
     setForm((prev: any) => {
       const next = { ...prev, [field]: value };
-      const nextPTax = field === "propertyTransferTax" ? parseFloat(value) || 0 : parseFloat(next.propertyTransferTax) || 0;
-      const nextNotary = field === "notaryCosts" ? parseFloat(value) || 0 : parseFloat(next.notaryCosts) || 0;
-      const nextLandReg = field === "landRegisterCosts" ? parseFloat(value) || 0 : parseFloat(next.landRegisterCosts) || 0;
-      const nextBroker = field === "brokerCosts" ? parseFloat(value) || 0 : parseFloat(next.brokerCosts) || 0;
-      const nextOther = field === "otherAncillaryCosts" ? parseFloat(value) || 0 : parseFloat(next.otherAncillaryCosts) || 0;
+      const nextPTax = parseGermanNumber(field === "propertyTransferTax" ? value : next.propertyTransferTax);
+      const nextNotary = parseGermanNumber(field === "notaryCosts" ? value : next.notaryCosts);
+      const nextLandReg = parseGermanNumber(field === "landRegisterCosts" ? value : next.landRegisterCosts);
+      const nextBroker = parseGermanNumber(field === "brokerCosts" ? value : next.brokerCosts);
+      const nextOther = parseGermanNumber(field === "otherAncillaryCosts" ? value : next.otherAncillaryCosts);
 
       const newSum = nextPTax + nextNotary + nextLandReg + nextBroker + nextOther;
       if (newSum > 0 || (value === "" && nextPTax === 0 && nextNotary === 0 && nextLandReg === 0 && nextBroker === 0 && nextOther === 0)) {
-        next.ancillaryCosts = newSum > 0 ? (Number.isInteger(newSum) ? newSum.toString() : newSum.toFixed(2)) : "";
+        next.ancillaryCosts = newSum > 0 ? formatGermanInput(newSum) : "";
       }
       return next;
     });
@@ -148,8 +155,8 @@ function DetailedAncillaryCostsSection({
       });
       return;
     }
-    const val = Math.round(price * (pct / 100));
-    updateDetailedField(field, val.toString());
+    const val = Math.round(price * (pct / 100) * 100) / 100;
+    updateDetailedField(field, formatGermanInput(val));
   };
 
   return (
@@ -185,9 +192,9 @@ function DetailedAncillaryCostsSection({
       <div className="grid grid-cols-2 gap-3 items-center">
         <div className="space-y-1">
           <Input
-            type="number"
-            step="0.01"
-            placeholder="z.B. 23500"
+            type="text"
+            inputMode="decimal"
+            placeholder="z.B. 23.500,00"
             value={form.ancillaryCosts}
             onChange={(e) => setForm((prev: any) => ({ ...prev, ancillaryCosts: e.target.value }))}
           />
@@ -195,7 +202,7 @@ function DetailedAncillaryCostsSection({
         <div className="text-[11px] text-muted-foreground leading-tight">
           {price > 0 && currentTotal > 0 ? (
             <span>
-              = <strong className="text-foreground">{((currentTotal / price) * 100).toFixed(1)}%</strong> des Kaufpreises
+              = <strong className="text-foreground">{formatGermanPercent((currentTotal / price) * 100, 1)}</strong> des Kaufpreises
               <span className="block text-[10px] text-muted-foreground/80 mt-0.5">
                 Gesamtinvestition: {formatCurrency(price + currentTotal)}
               </span>
@@ -226,15 +233,15 @@ function DetailedAncillaryCostsSection({
               </Label>
               {price > 0 && pTax > 0 && (
                 <span className="text-[10px] text-muted-foreground font-mono">
-                  {((pTax / price) * 100).toFixed(1)}%
+                  {formatGermanPercent((pTax / price) * 100, 1)}
                 </span>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <Input
-                type="number"
-                step="0.01"
-                placeholder="z.B. 13200"
+                type="text"
+                inputMode="decimal"
+                placeholder="z.B. 13.200,00"
                 className="h-8 text-xs font-mono"
                 value={form.propertyTransferTax}
                 onChange={(e) => updateDetailedField("propertyTransferTax", e.target.value)}
@@ -270,15 +277,15 @@ function DetailedAncillaryCostsSection({
               </Label>
               {price > 0 && notary > 0 && (
                 <span className="text-[10px] text-muted-foreground font-mono">
-                  {((notary / price) * 100).toFixed(2)}%
+                  {formatGermanPercent((notary / price) * 100, 2)}
                 </span>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <Input
-                type="number"
-                step="0.01"
-                placeholder="z.B. 3300"
+                type="text"
+                inputMode="decimal"
+                placeholder="z.B. 3.300,00"
                 className="h-8 text-xs font-mono"
                 value={form.notaryCosts}
                 onChange={(e) => updateDetailedField("notaryCosts", e.target.value)}
@@ -306,15 +313,15 @@ function DetailedAncillaryCostsSection({
               </Label>
               {price > 0 && landReg > 0 && (
                 <span className="text-[10px] text-muted-foreground font-mono">
-                  {((landReg / price) * 100).toFixed(2)}%
+                  {formatGermanPercent((landReg / price) * 100, 2)}
                 </span>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <Input
-                type="number"
-                step="0.01"
-                placeholder="z.B. 1100"
+                type="text"
+                inputMode="decimal"
+                placeholder="z.B. 1.100,00"
                 className="h-8 text-xs font-mono"
                 value={form.landRegisterCosts}
                 onChange={(e) => updateDetailedField("landRegisterCosts", e.target.value)}
@@ -342,15 +349,15 @@ function DetailedAncillaryCostsSection({
               </Label>
               {price > 0 && broker > 0 && (
                 <span className="text-[10px] text-muted-foreground font-mono">
-                  {((broker / price) * 100).toFixed(2)}%
+                  {formatGermanPercent((broker / price) * 100, 2)}
                 </span>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <Input
-                type="number"
-                step="0.01"
-                placeholder="z.B. 7854"
+                type="text"
+                inputMode="decimal"
+                placeholder="z.B. 7.854,00"
                 className="h-8 text-xs font-mono"
                 value={form.brokerCosts}
                 onChange={(e) => updateDetailedField("brokerCosts", e.target.value)}
@@ -396,9 +403,9 @@ function DetailedAncillaryCostsSection({
               <span className="text-[10px] text-muted-foreground">Gutachter, Bewertung, etc.</span>
             </div>
             <Input
-              type="number"
-              step="0.01"
-              placeholder="z.B. 500"
+              type="text"
+              inputMode="decimal"
+              placeholder="z.B. 500,00"
               className="h-8 text-xs font-mono"
               value={form.otherAncillaryCosts}
               onChange={(e) => updateDetailedField("otherAncillaryCosts", e.target.value)}
@@ -420,7 +427,7 @@ function DetailedAncillaryCostsSection({
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-[10px] text-primary"
-                onClick={() => setForm((prev: any) => ({ ...prev, ancillaryCosts: detailedSum.toString() }))}
+                onClick={() => setForm((prev: any) => ({ ...prev, ancillaryCosts: formatGermanInput(detailedSum) }))}
               >
                 Als Summe übernehmen
               </Button>
@@ -450,27 +457,40 @@ function EditPropertyDialog({
     floor: property.floor || "",
     unitNumber: property.unitNumber || "",
     rooms: property.rooms ? property.rooms.toString() : "",
-    purchasePrice: property.purchasePrice ? property.purchasePrice.toString() : "",
+    purchasePrice: property.purchasePrice != null ? formatGermanInput(property.purchasePrice) : "",
     purchasedAt: property.purchasedAt ? property.purchasedAt.split("T")[0] : "",
     possessionAt: property.possessionAt ? property.possessionAt.split("T")[0] : "",
-    ancillaryCosts: property.ancillaryCosts ? property.ancillaryCosts.toString() : "",
-    propertyTransferTax: property.propertyTransferTax ? property.propertyTransferTax.toString() : "",
-    notaryCosts: property.notaryCosts ? property.notaryCosts.toString() : "",
-    landRegisterCosts: property.landRegisterCosts ? property.landRegisterCosts.toString() : "",
-    brokerCosts: property.brokerCosts ? property.brokerCosts.toString() : "",
-    otherAncillaryCosts: property.otherAncillaryCosts ? property.otherAncillaryCosts.toString() : "",
-    buildingSharePercent: property.buildingSharePercent != null ? property.buildingSharePercent.toString() : "80",
-    nonRecoverableCosts: property.nonRecoverableCosts != null ? property.nonRecoverableCosts.toString() : "",
-    maintenanceReserve: property.maintenanceReserve != null ? property.maintenanceReserve.toString() : "",
+    ancillaryCosts: property.ancillaryCosts != null ? formatGermanInput(property.ancillaryCosts) : "",
+    propertyTransferTax: property.propertyTransferTax != null ? formatGermanInput(property.propertyTransferTax) : "",
+    notaryCosts: property.notaryCosts != null ? formatGermanInput(property.notaryCosts) : "",
+    landRegisterCosts: property.landRegisterCosts != null ? formatGermanInput(property.landRegisterCosts) : "",
+    brokerCosts: property.brokerCosts != null ? formatGermanInput(property.brokerCosts) : "",
+    otherAncillaryCosts: property.otherAncillaryCosts != null ? formatGermanInput(property.otherAncillaryCosts) : "",
+    buildingSharePercent: property.buildingSharePercent != null ? formatGermanInput(property.buildingSharePercent) : "80",
+    nonRecoverableCosts: property.nonRecoverableCosts != null ? formatGermanInput(property.nonRecoverableCosts) : "",
+    maintenanceReserve: property.maintenanceReserve != null ? formatGermanInput(property.maintenanceReserve) : "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    const payload = {
+      ...form,
+      purchasePrice: form.purchasePrice ? parseGermanNumber(form.purchasePrice) : null,
+      ancillaryCosts: form.ancillaryCosts ? parseGermanNumber(form.ancillaryCosts) : null,
+      propertyTransferTax: form.propertyTransferTax ? parseGermanNumber(form.propertyTransferTax) : null,
+      notaryCosts: form.notaryCosts ? parseGermanNumber(form.notaryCosts) : null,
+      landRegisterCosts: form.landRegisterCosts ? parseGermanNumber(form.landRegisterCosts) : null,
+      brokerCosts: form.brokerCosts ? parseGermanNumber(form.brokerCosts) : null,
+      otherAncillaryCosts: form.otherAncillaryCosts ? parseGermanNumber(form.otherAncillaryCosts) : null,
+      buildingSharePercent: form.buildingSharePercent ? parseGermanNumber(form.buildingSharePercent) : 80,
+      nonRecoverableCosts: form.nonRecoverableCosts ? parseGermanNumber(form.nonRecoverableCosts) : null,
+      maintenanceReserve: form.maintenanceReserve ? parseGermanNumber(form.maintenanceReserve) : null,
+    };
     const res = await fetch(`/api/properties/${property.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (res.ok) {
@@ -572,9 +592,9 @@ function EditPropertyDialog({
               <div className="space-y-1">
                 <Label className="text-xs">Kaufpreis (€)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="z.B. 220000"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="z.B. 220.000,00"
                   value={form.purchasePrice}
                   onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })}
                 />
@@ -661,9 +681,9 @@ function EditPropertyDialog({
               <div className="space-y-1">
                 <Label className="text-xs">Nicht-umlagef. Kosten (€/Mo)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder={`Pauschale: ${(parseFloat(form.sqm || "0") * 0.35 + 25).toFixed(2)} €`}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={`Pauschale: ${formatGermanNumber(parseFloat(form.sqm || "0") * 0.35 + 25, 2)} €`}
                   value={form.nonRecoverableCosts}
                   onChange={(e) => setForm({ ...form, nonRecoverableCosts: e.target.value })}
                 />
@@ -674,9 +694,9 @@ function EditPropertyDialog({
               <div className="space-y-1">
                 <Label className="text-xs">Instandhaltungsrücklage (€/Mo)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder={`Standard: ${(parseFloat(form.sqm || "0") * 1.20).toFixed(2)} €`}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={`Standard: ${formatGermanNumber(parseFloat(form.sqm || "0") * 1.20, 2)} €`}
                   value={form.maintenanceReserve}
                   onChange={(e) => setForm({ ...form, maintenanceReserve: e.target.value })}
                 />
@@ -1654,10 +1674,10 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
   const price = property.purchasePrice || 0;
   const ancillary = property.ancillaryCosts || 0;
   const totalInvestment = price + ancillary;
-  const sqmPrice = price > 0 && property.sqm > 0 ? (price / property.sqm).toFixed(0) : null;
+  const sqmPrice = price > 0 && property.sqm > 0 ? formatGermanNumber(price / property.sqm, 0) : null;
   const annualColdRent = property.tenant ? property.tenant.coldRent * 12 : 0;
-  const grossYield = price > 0 && annualColdRent > 0 ? ((annualColdRent / price) * 100).toFixed(2) : null;
-  const multiplier = price > 0 && annualColdRent > 0 ? (price / annualColdRent).toFixed(1) : null;
+  const grossYield = price > 0 && annualColdRent > 0 ? formatGermanPercent((annualColdRent / price) * 100, 2) : null;
+  const multiplier = price > 0 && annualColdRent > 0 ? formatGermanNumber(price / annualColdRent, 1) : null;
 
   // Investitionen & Sanierungen Auswertung
   const totalInvestments = (property.investments || []).reduce((s, i) => s + i.amount, 0);
@@ -1801,7 +1821,7 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
                 <span className="text-muted-foreground">Mietrendite (brutto):</span>
                 <div className="flex items-center gap-1.5">
                   <Badge variant="success" className="text-[10px] h-4 px-1.5 font-mono">
-                    {grossYield}% p.a.
+                    {grossYield} p.a.
                   </Badge>
                   {multiplier && (
                     <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-mono">
@@ -2318,18 +2338,18 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
       floor: form.floor || null,
       unitNumber: form.unitNumber || null,
       rooms: form.rooms || null,
-      purchasePrice: form.purchasePrice ? parseFloat(form.purchasePrice) : null,
+      purchasePrice: form.purchasePrice ? parseGermanNumber(form.purchasePrice) : null,
       purchasedAt: form.purchasedAt || null,
       possessionAt: form.possessionAt || null,
-      ancillaryCosts: form.ancillaryCosts ? parseFloat(form.ancillaryCosts) : null,
-      propertyTransferTax: form.propertyTransferTax ? parseFloat(form.propertyTransferTax) : null,
-      notaryCosts: form.notaryCosts ? parseFloat(form.notaryCosts) : null,
-      landRegisterCosts: form.landRegisterCosts ? parseFloat(form.landRegisterCosts) : null,
-      brokerCosts: form.brokerCosts ? parseFloat(form.brokerCosts) : null,
-      otherAncillaryCosts: form.otherAncillaryCosts ? parseFloat(form.otherAncillaryCosts) : null,
-      buildingSharePercent: form.buildingSharePercent ? parseFloat(form.buildingSharePercent) : 80,
-      nonRecoverableCosts: form.nonRecoverableCosts ? parseFloat(form.nonRecoverableCosts) : null,
-      maintenanceReserve: form.maintenanceReserve ? parseFloat(form.maintenanceReserve) : null,
+      ancillaryCosts: form.ancillaryCosts ? parseGermanNumber(form.ancillaryCosts) : null,
+      propertyTransferTax: form.propertyTransferTax ? parseGermanNumber(form.propertyTransferTax) : null,
+      notaryCosts: form.notaryCosts ? parseGermanNumber(form.notaryCosts) : null,
+      landRegisterCosts: form.landRegisterCosts ? parseGermanNumber(form.landRegisterCosts) : null,
+      brokerCosts: form.brokerCosts ? parseGermanNumber(form.brokerCosts) : null,
+      otherAncillaryCosts: form.otherAncillaryCosts ? parseGermanNumber(form.otherAncillaryCosts) : null,
+      buildingSharePercent: form.buildingSharePercent ? parseGermanNumber(form.buildingSharePercent) : 80,
+      nonRecoverableCosts: form.nonRecoverableCosts ? parseGermanNumber(form.nonRecoverableCosts) : null,
+      maintenanceReserve: form.maintenanceReserve ? parseGermanNumber(form.maintenanceReserve) : null,
       ...(withTenant && form.tenantLastName
         ? {
             tenant: {
@@ -2338,9 +2358,9 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
               email: form.tenantEmail || null,
               phone: form.tenantPhone || null,
               iban: form.tenantIban || null,
-              coldRent: parseFloat(form.tenantColdRent || "0"),
-              utilities: parseFloat(form.tenantUtilities || "0"),
-              deposit: parseFloat(form.tenantDeposit || "0"),
+              coldRent: parseGermanNumber(form.tenantColdRent || "0"),
+              utilities: parseGermanNumber(form.tenantUtilities || "0"),
+              deposit: parseGermanNumber(form.tenantDeposit || "0"),
               depositPaid: form.tenantDepositPaid,
               moveInDate: form.tenantMoveInDate,
               contractStart: form.tenantContractStart,
@@ -2497,9 +2517,9 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
               <div className="space-y-1">
                 <Label className="text-xs">Kaufpreis (€)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="z.B. 240000"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="z.B. 240.000,00"
                   value={form.purchasePrice}
                   onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })}
                 />
@@ -2586,9 +2606,9 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
               <div className="space-y-1">
                 <Label className="text-xs">Nicht-umlagef. Kosten (€/Mo)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder={`Pauschale: ${(parseFloat(form.sqm || "0") * 0.35 + 25).toFixed(2)} €`}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={`Pauschale: ${formatGermanNumber(parseFloat(form.sqm || "0") * 0.35 + 25, 2)} €`}
                   value={form.nonRecoverableCosts}
                   onChange={(e) => setForm({ ...form, nonRecoverableCosts: e.target.value })}
                 />
@@ -2599,9 +2619,9 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
               <div className="space-y-1">
                 <Label className="text-xs">Instandhaltungsrücklage (€/Mo)</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder={`Standard: ${(parseFloat(form.sqm || "0") * 1.20).toFixed(2)} €`}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={`Standard: ${formatGermanNumber(parseFloat(form.sqm || "0") * 1.20, 2)} €`}
                   value={form.maintenanceReserve}
                   onChange={(e) => setForm({ ...form, maintenanceReserve: e.target.value })}
                 />
@@ -2895,7 +2915,7 @@ function PortfolioKaufwertInfoDialog({
                   </span>
                   {totalPurchaseValue > 0 && totalTransferTax > 0 && (
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      {((totalTransferTax / totalPurchaseValue) * 100).toFixed(1)}% v. Kaufwert
+                      {formatGermanPercent((totalTransferTax / totalPurchaseValue) * 100, 1)} v. Kaufwert
                     </span>
                   )}
                 </div>
@@ -2906,7 +2926,7 @@ function PortfolioKaufwertInfoDialog({
                   </span>
                   {totalPurchaseValue > 0 && totalNotaryCosts > 0 && (
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      {((totalNotaryCosts / totalPurchaseValue) * 100).toFixed(2)}% v. Kaufwert
+                      {formatGermanPercent((totalNotaryCosts / totalPurchaseValue) * 100, 2)} v. Kaufwert
                     </span>
                   )}
                 </div>
@@ -2917,7 +2937,7 @@ function PortfolioKaufwertInfoDialog({
                   </span>
                   {totalPurchaseValue > 0 && totalLandRegCosts > 0 && (
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      {((totalLandRegCosts / totalPurchaseValue) * 100).toFixed(2)}% v. Kaufwert
+                      {formatGermanPercent((totalLandRegCosts / totalPurchaseValue) * 100, 2)} v. Kaufwert
                     </span>
                   )}
                 </div>
@@ -2928,7 +2948,7 @@ function PortfolioKaufwertInfoDialog({
                   </span>
                   {totalPurchaseValue > 0 && totalBrokerCosts > 0 && (
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      {((totalBrokerCosts / totalPurchaseValue) * 100).toFixed(2)}% v. Kaufwert
+                      {formatGermanPercent((totalBrokerCosts / totalPurchaseValue) * 100, 2)} v. Kaufwert
                     </span>
                   )}
                 </div>
@@ -2969,7 +2989,7 @@ function PortfolioKaufwertInfoDialog({
               {avgSqmPrice && (
                 <div className="md:col-span-2">
                   <strong className="text-foreground">Durchschnittlicher m²-Kaufpreis:</strong>
-                  <p>Portfolio-Kaufwert ÷ {totalSqm.toFixed(1)} m² Gesamtwohnfläche = ca. {avgSqmPrice.toLocaleString("de-DE")} €/m².</p>
+                  <p>Portfolio-Kaufwert ÷ {formatGermanNumber(totalSqm, 1)} m² Gesamtwohnfläche = ca. {avgSqmPrice.toLocaleString("de-DE")} €/m².</p>
                 </div>
               )}
             </div>
@@ -2995,7 +3015,7 @@ function PortfolioKaufwertInfoDialog({
                     const price = p.purchasePrice || 0;
                     const anc = p.ancillaryCosts || 0;
                     const cold = p.tenant?.coldRent || 0;
-                    const yld = price > 0 && cold > 0 ? ((cold * 12 / price) * 100).toFixed(2) : null;
+                    const yld = price > 0 && cold > 0 ? formatGermanPercent((cold * 12 / price) * 100, 2) : null;
 
                     return (
                       <TableRow key={p.id}>
@@ -3034,7 +3054,7 @@ function PortfolioKaufwertInfoDialog({
                         </TableCell>
                         <TableCell className="text-xs text-right font-semibold">
                           {yld ? (
-                            <span className="text-green-600 dark:text-green-400">{yld}% p.a.</span>
+                            <span className="text-green-600 dark:text-green-400">{yld} p.a.</span>
                           ) : (
                             <span className="text-muted-foreground">–</span>
                           )}
@@ -3094,7 +3114,7 @@ export default function WohnungenPage() {
   const totalAncillaryCosts = properties.reduce((s, p) => s + (p.ancillaryCosts || 0), 0);
   const propertiesWithPrice = properties.filter((p) => p.purchasePrice && p.purchasePrice > 0);
   const portfolioYield = totalPurchaseValue > 0 && totalColdRent > 0
-    ? ((totalColdRent * 12 / totalPurchaseValue) * 100).toFixed(2)
+    ? formatGermanPercent((totalColdRent * 12 / totalPurchaseValue) * 100, 2)
     : null;
 
   // Alle Mietanpassungen für den Fristenrechner
@@ -3170,12 +3190,12 @@ export default function WohnungenPage() {
               )}
             </div>
             <p className="text-xl sm:text-2xl font-bold text-primary">
-              {totalPurchaseValue > 0 ? formatCurrency(totalPurchaseValue) : `${totalSqm.toFixed(1)} m²`}
+              {totalPurchaseValue > 0 ? formatCurrency(totalPurchaseValue) : `${formatGermanNumber(totalSqm, 1)} m²`}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {portfolioYield
-                ? `Ø Brutto-Rendite: ${portfolioYield}% p.a.`
-                : `Ø ${totalSqm > 0 ? (totalColdRent / totalSqm).toFixed(2) : 0} €/m² Kalt`}
+                ? `Ø Brutto-Rendite: ${portfolioYield} p.a.`
+                : `Ø ${totalSqm > 0 ? formatGermanNumber(totalColdRent / totalSqm, 2) : "0,00"} €/m² Kalt`}
             </p>
           </CardContent>
         </Card>

@@ -18,6 +18,97 @@ export function formatCurrency(amount: number, decimals = 2): string {
 }
 
 /**
+ * Parst eine Zahl oder einen String nach deutschem Standard:
+ * - Komma ist Dezimaltrenner (z.B. "1.250,50" -> 1250.5, "1250,50" -> 1250.5)
+ * - Punkte sind Tausendertrenner (z.B. "1.250" -> 1250, "10.000" -> 10000)
+ * - Falls ein Altwert mit Dezimalpunkt übergeben wird (z.B. "1250.50" ohne Komma), wird er ebenfalls sicher erkannt.
+ */
+export function parseGermanNumber(val: string | number | null | undefined): number {
+  if (val == null || val === "") return 0;
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  const str = String(val).replace(/€|%|\s/g, "").trim();
+  if (!str) return 0;
+
+  // Wenn ein Komma enthalten ist: deutsches Format (Punkte = Tausender, Komma = Dezimal)
+  if (str.includes(",")) {
+    const normalized = str.replace(/\./g, "").replace(",", ".");
+    const num = parseFloat(normalized);
+    return isNaN(num) ? 0 : num;
+  }
+
+  // Kein Komma enthalten:
+  // Prüfe, ob Punkte als Tausendertrenner verwendet wurden (z.B. "1.250" oder "10.000.000")
+  if (/^\d{1,3}(\.\d{3})+$/.test(str)) {
+    const normalized = str.replace(/\./g, "");
+    const num = parseFloat(normalized);
+    return isNaN(num) ? 0 : num;
+  }
+
+  // Ansonsten normaler Float-Parse (auch für "1250.50" oder "1250")
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Formatiert eine Zahl nach deutschem Standard: Komma als Dezimaltrenner, Punkt als Tausendertrenner.
+ * Niemals Dezimalpunkte!
+ */
+export function formatGermanNumber(
+  value: number | string | null | undefined,
+  decimals = 2,
+  includeThousands = true
+): string {
+  if (value == null || value === "") return "";
+  const num = typeof value === "number" ? value : parseGermanNumber(value);
+  if (isNaN(num)) return "";
+  return new Intl.NumberFormat("de-DE", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+    useGrouping: includeThousands,
+  }).format(num);
+}
+
+/**
+ * Formatiert einen Prozentwert mit deutschem Komma (z.B. "3,5 %" oder "3,57 %").
+ */
+export function formatGermanPercent(
+  value: number | string | null | undefined,
+  decimals = 1
+): string {
+  if (value == null || value === "") return "0 %";
+  const num = typeof value === "number" ? value : parseGermanNumber(value);
+  if (isNaN(num)) return "0 %";
+  return (
+    new Intl.NumberFormat("de-DE", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(num) + " %"
+  );
+}
+
+/**
+ * Formatiert Zahlen für Formulareingabefelder (ohne Tausenderpunkte für einfaches Editieren,
+ * aber immer mit deutschem Komma für Dezimalstellen falls vorhanden).
+ */
+export function formatGermanInput(
+  value: number | string | null | undefined,
+  decimals?: number
+): string {
+  if (value == null || value === "") return "";
+  const num = typeof value === "number" ? value : parseGermanNumber(value);
+  if (isNaN(num)) return "";
+  if (decimals !== undefined) {
+    return formatGermanNumber(num, decimals, false);
+  }
+  // Falls Ganzzahl: keine Nachkommastellen
+  if (Number.isInteger(num)) {
+    return num.toString();
+  }
+  // Falls Dezimalzahl: max 2 Nachkommastellen mit Komma
+  return formatGermanNumber(num, 2, false);
+}
+
+/**
  * Formatiert Beträge kompakt (z.B. für Diagrammachsen):
  * - von 0 bis 999 €: genauer Betrag (z.B. "0 €", "100 €", "200 €", "850 €")
  * - ab 1.000 €: kompakte Darstellung in k€ (z.B. "1k €", "1,1k €", "15k €")

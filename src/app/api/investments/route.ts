@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { safeDate } from "@/lib/utils";
+import { safeDate, parseGermanNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const gross = parseFloat(body.amount);
+    const gross = parseGermanNumber(body.amount);
     if (isNaN(gross) || gross <= 0) {
       return NextResponse.json(
         { error: "Ungültiger Betrag angegeben." },
@@ -64,8 +64,8 @@ export async function POST(request: Request) {
     }
 
     // Falls kein Nettobetrag angegeben wurde: Vorbelegung mit 19% USt-Abzug (Standard)
-    const net = body.amountNet !== undefined && body.amountNet !== "" && !isNaN(parseFloat(body.amountNet))
-      ? parseFloat(body.amountNet)
+    const net = body.amountNet !== undefined && body.amountNet !== "" && !isNaN(parseGermanNumber(body.amountNet))
+      ? parseGermanNumber(body.amountNet)
       : Math.round((gross / 1.19) * 100) / 100;
 
     const investment = await prisma.propertyInvestment.create({

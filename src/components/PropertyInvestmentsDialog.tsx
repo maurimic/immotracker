@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import {
   Wrench, Calendar, Plus, Trash2, AlertCircle, CheckCircle2,
   Building2, ArrowRight, Info, ShieldAlert, Sparkles, Hammer,
-  Check, AlertTriangle, Clock, Coins, Percent
+  Check, AlertTriangle, Clock, Coins, Percent, Pencil
 } from "lucide-react";
 import {
   Dialog,
@@ -35,7 +35,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  parseGermanNumber,
+  formatGermanNumber,
+  formatGermanPercent,
+  formatGermanInput,
+} from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 
 export interface PropertyInvestment {
@@ -146,9 +153,25 @@ export function PropertyInvestmentsDialog({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
+  // Edit State
+  const [editingInvestment, setEditingInvestment] = useState<PropertyInvestment | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
   // Form State
   const today = new Date().toISOString().split("T")[0];
   const [form, setForm] = useState({
+    title: "",
+    category: "SANIERUNG",
+    amount: "",
+    amountNet: "",
+    date: today,
+    craftsman: "",
+    description: "",
+    isCapitalized: true,
+    relevantFor15Percent: true,
+  });
+
+  const [editForm, setEditForm] = useState({
     title: "",
     category: "SANIERUNG",
     amount: "",
@@ -184,13 +207,13 @@ export function PropertyInvestmentsDialog({
 
   // Auto-calculate Netto from Brutto (Standard 19% USt)
   const handleGrossChange = (val: string) => {
-    const gross = parseFloat(val);
+    const gross = parseGermanNumber(val);
     if (!isNaN(gross) && gross > 0) {
       const net = Math.round((gross / 1.19) * 100) / 100;
       setForm((prev) => ({
         ...prev,
         amount: val,
-        amountNet: net.toString(),
+        amountNet: formatGermanInput(net),
       }));
     } else {
       setForm((prev) => ({
@@ -198,6 +221,105 @@ export function PropertyInvestmentsDialog({
         amount: val,
         amountNet: "",
       }));
+    }
+  };
+
+  const handleEditGrossChange = (val: string) => {
+    const gross = parseGermanNumber(val);
+    if (!isNaN(gross) && gross > 0) {
+      const net = Math.round((gross / 1.19) * 100) / 100;
+      setEditForm((prev) => ({
+        ...prev,
+        amount: val,
+        amountNet: formatGermanInput(net),
+      }));
+    } else {
+      setEditForm((prev) => ({
+        ...prev,
+        amount: val,
+        amountNet: "",
+      }));
+    }
+  };
+
+  const handleStartEdit = (inv: PropertyInvestment) => {
+    setEditingInvestment(inv);
+    const invDate = inv.date
+      ? typeof inv.date === "string"
+        ? inv.date.split("T")[0]
+        : new Date(inv.date).toISOString().split("T")[0]
+      : today;
+
+    setEditForm({
+      title: inv.title,
+      category: inv.category || "SANIERUNG",
+      amount: formatGermanInput(inv.amount),
+      amountNet: inv.amountNet != null ? formatGermanInput(inv.amountNet) : "",
+      date: invDate,
+      craftsman: inv.craftsman || "",
+      description: inv.description || "",
+      isCapitalized: inv.isCapitalized ?? true,
+      relevantFor15Percent: inv.relevantFor15Percent ?? true,
+    });
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInvestment) return;
+    if (!editForm.title || !editForm.amount) {
+      toast({
+        title: "Pflichtfelder fehlen",
+        description: "Bitte Bezeichnung und Betrag angeben.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const gross = parseGermanNumber(editForm.amount);
+      const net = editForm.amountNet ? parseGermanNumber(editForm.amountNet) : undefined;
+
+      const res = await fetch(`/api/investments/${editingInvestment.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editForm.title,
+          category: editForm.category,
+          amount: gross,
+          amountNet: net,
+          date: editForm.date,
+          craftsman: editForm.craftsman || null,
+          description: editForm.description || null,
+          isCapitalized: editForm.isCapitalized,
+          relevantFor15Percent: editForm.relevantFor15Percent,
+        }),
+      });
+
+      if (res.ok) {
+        toast({
+          title: "Investition aktualisiert!",
+          description: `"${editForm.title}" wurde erfolgreich gespeichert.`,
+        });
+        setEditingInvestment(null);
+        fetchInvestments();
+        if (onRefresh) onRefresh();
+      } else {
+        const err = await res.json();
+        toast({
+          title: "Fehler beim Aktualisieren",
+          description: err.error || "Investition konnte nicht aktualisiert werden.",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Netzwerkfehler",
+        description: e?.message || "Fehler beim Aktualisieren",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -214,6 +336,9 @@ export function PropertyInvestmentsDialog({
 
     setSaving(true);
     try {
+      const gross = parseGermanNumber(form.amount);
+      const net = form.amountNet ? parseGermanNumber(form.amountNet) : undefined;
+
       const res = await fetch("/api/investments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,8 +346,8 @@ export function PropertyInvestmentsDialog({
           propertyId: property.id,
           title: form.title,
           category: form.category,
-          amount: parseFloat(form.amount),
-          amountNet: form.amountNet ? parseFloat(form.amountNet) : undefined,
+          amount: gross,
+          amountNet: net,
           date: form.date,
           craftsman: form.craftsman || null,
           description: form.description || null,
@@ -378,6 +503,7 @@ export function PropertyInvestmentsDialog({
   }, [property, investments]);
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -532,7 +658,7 @@ export function PropertyInvestmentsDialog({
                   {monitoring.purchasePrice > 0 ? formatCurrency(monitoring.remainingBuffer) : "–"}
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  {monitoring.limit15 > 0 ? `${monitoring.usedPercent.toFixed(1)}% ausgeschöpft` : "–"}
+                  {monitoring.limit15 > 0 ? `${formatGermanPercent(monitoring.usedPercent, 1)} ausgeschöpft` : "–"}
                 </span>
               </div>
             </div>
@@ -543,7 +669,7 @@ export function PropertyInvestmentsDialog({
                 <div className="flex justify-between text-[11px] text-muted-foreground">
                   <span>Auslastung des 15%-Budgets:</span>
                   <span className="font-mono font-semibold text-foreground">
-                    {monitoring.usedPercent.toFixed(1)}%
+                    {formatGermanPercent(monitoring.usedPercent, 1)}
                   </span>
                 </div>
                 <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
@@ -627,9 +753,9 @@ export function PropertyInvestmentsDialog({
                   <div className="space-y-1">
                     <Label className="text-xs">Rechnungsbetrag Brutto (€) *</Label>
                     <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="z.B. 11900.00"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="z.B. 11.900,00"
                       value={form.amount}
                       onChange={(e) => handleGrossChange(e.target.value)}
                       required
@@ -640,9 +766,9 @@ export function PropertyInvestmentsDialog({
                       Rechnungsbetrag Netto (€) <span className="text-[10px] text-muted-foreground">(15%-Basis)</span>
                     </Label>
                     <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="z.B. 10000.00"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="z.B. 10.000,00"
                       value={form.amountNet}
                       onChange={(e) => setForm({ ...form, amountNet: e.target.value })}
                     />
@@ -756,7 +882,7 @@ export function PropertyInvestmentsDialog({
                       <TableHead>Handwerker</TableHead>
                       <TableHead className="text-right">Betrag (Brutto / Netto)</TableHead>
                       <TableHead className="text-center">Eigenschaften</TableHead>
-                      <TableHead className="w-12 text-center"></TableHead>
+                      <TableHead className="w-20 text-center">Aktionen</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -819,16 +945,27 @@ export function PropertyInvestmentsDialog({
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-500"
-                              onClick={() => handleDelete(inv.id, inv.title)}
-                              disabled={deletingId === inv.id}
-                              title="Investition löschen"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                                onClick={() => handleStartEdit(inv)}
+                                title="Investition bearbeiten"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-500"
+                                onClick={() => handleDelete(inv.id, inv.title)}
+                                disabled={deletingId === inv.id}
+                                title="Investition löschen"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -841,5 +978,156 @@ export function PropertyInvestmentsDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* ─── Investition bearbeiten Dialog ─────────────────── */}
+    <Dialog open={!!editingInvestment} onOpenChange={(isOpen) => !isOpen && setEditingInvestment(null)}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Pencil className="h-4 w-4 text-primary" /> Investition bearbeiten
+          </DialogTitle>
+          <DialogDescription>
+            Maßnahme, Beträge und steuerliche Zuordnung anpassen.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleUpdate} className="space-y-3.5 mt-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Bezeichnung / Maßnahme *</Label>
+              <Input
+                placeholder="z.B. Neues Badezimmer, Brennwerttherme"
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Kategorie</Label>
+              <Select
+                value={editForm.category}
+                onValueChange={(v) => setEditForm({ ...editForm, category: v })}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(INVESTMENT_CATEGORIES).map(([catKey, cat]) => (
+                    <SelectItem key={catKey} value={catKey} className="text-xs">
+                      <span className="mr-1.5">{cat.icon}</span> {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Rechnungsbetrag Brutto (€) *</Label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="z.B. 11.900,00"
+                value={editForm.amount}
+                onChange={(e) => handleEditGrossChange(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">
+                Rechnungsbetrag Netto (€) <span className="text-[10px] text-muted-foreground">(15%-Basis)</span>
+              </Label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="z.B. 10.000,00"
+                value={editForm.amountNet}
+                onChange={(e) => setEditForm({ ...editForm, amountNet: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Rechnungsdatum *</Label>
+              <DateInput
+                value={editForm.date}
+                onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Handwerker / Fachbetrieb</Label>
+              <Input
+                placeholder="z.B. Sanitär Meier GmbH"
+                value={editForm.craftsman}
+                onChange={(e) => setEditForm({ ...editForm, craftsman: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Notizen / Beschreibung</Label>
+              <Input
+                placeholder="z.B. Erneuerung aller Zuleitungen & Fliesen"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Checkboxen für Vermögen & 15%-Grenze */}
+          <div className="pt-2 border-t border-border/50 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg bg-background border border-border/60 hover:bg-secondary/40 transition-colors">
+              <input
+                type="checkbox"
+                checked={editForm.isCapitalized}
+                onChange={(e) => setEditForm({ ...editForm, isCapitalized: e.target.checked })}
+                className="mt-0.5 h-4 w-4 rounded border-input text-primary cursor-pointer"
+              />
+              <div>
+                <span className="font-semibold text-foreground text-xs block">
+                  Wertsteigernd / Vermögen
+                </span>
+                <span className="text-[10px] text-muted-foreground block">
+                  Erhöht den Sachwert der Immobilie in der Vermögensbilanz & Portfolioübersicht
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-2 cursor-pointer p-2 rounded-lg bg-background border border-border/60 hover:bg-secondary/40 transition-colors">
+              <input
+                type="checkbox"
+                checked={editForm.relevantFor15Percent}
+                onChange={(e) => setEditForm({ ...editForm, relevantFor15Percent: e.target.checked })}
+                className="mt-0.5 h-4 w-4 rounded border-input text-primary cursor-pointer"
+              />
+              <div>
+                <span className="font-semibold text-foreground text-xs block">
+                  Zählt zur 15%-Grenze (§ 6 EStG)
+                </span>
+                <span className="text-[10px] text-muted-foreground block">
+                  Wird im 3-Jahres-Monitor auf das Netto-Budget angerechnet
+                </span>
+              </div>
+            </label>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingInvestment(null)}
+            >
+              Abbrechen
+            </Button>
+            <Button type="submit" size="sm" disabled={savingEdit}>
+              {savingEdit ? "Wird gespeichert..." : "Änderungen speichern"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
