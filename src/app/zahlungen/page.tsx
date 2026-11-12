@@ -24,6 +24,11 @@ import { formatCurrency, formatDate, currentPeriod, formatRelativeDate } from "@
 import { toast } from "@/hooks/use-toast";
 import { getRentForPeriod } from "@/lib/rent-history";
 import { RentAdjustmentDialog } from "@/components/RentAdjustmentDialog";
+import {
+  findBestMatchingProperty,
+  extractAddressKeywords,
+  type PropertyMatchInfo,
+} from "@/lib/property-matching";
 
 interface Tenant {
   id: string;
@@ -1400,7 +1405,7 @@ function SplitPaymentDialog({
 }: {
   payment: Payment;
   tenants: Tenant[];
-  properties: Array<{ id: string; name: string; address: string }>;
+  properties: PropertyMatchInfo[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdated: () => void;
@@ -1408,6 +1413,64 @@ function SplitPaymentDialog({
   const [splits, setSplits] = useState<SplitItemState[]>([]);
   const [saving, setSaving] = useState(false);
   const [unsplitLoading, setUnsplitLoading] = useState(false);
+
+  // Ermittelt alle Wohnungen desselben Mehrfamilienhauses (z.B. Siemensstraße 28 EG + 2.OG)
+  const buildingProps = useMemo(() => {
+    const combinedText = `${payment.payerName || ""} ${payment.reference || ""}`;
+    const match = findBestMatchingProperty(combinedText, properties);
+    if (match?.ambiguousBuildingProperties && match.ambiguousBuildingProperties.length > 1) {
+      return match.ambiguousBuildingProperties;
+    }
+    const baseProp = match?.property || (payment.propertyId ? properties.find((p) => p.id === payment.propertyId) : null);
+    if (baseProp) {
+      const kBase = extractAddressKeywords(baseProp);
+      const sameHouse = properties.filter((p) => {
+        const kOther = extractAddressKeywords(p);
+        return kBase.some((w) => kOther.includes(w));
+      });
+      if (sameHouse.length > 1) return sameHouse;
+    }
+    return [];
+  }, [payment, properties]);
+
+  const buildBuildingSplits = (mode: "SQM" | "EQUAL", targetProps: PropertyMatchInfo[]): SplitItemState[] => {
+    const basePeriod =
+      payment.period && /^\d{4}-\d{2}$/.test(payment.period)
+        ? payment.period
+        : payment.bookingDate
+        ? payment.bookingDate.slice(0, 7)
+        : currentPeriod();
+
+    const totalCents = Math.round(payment.amount * 100);
+    const hasSqm = targetProps.every((p) => (p.sqm || 0) > 0);
+    const weights = targetProps.map((p) => (mode === "SQM" && hasSqm ? (p.sqm || 1) : 1));
+    const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+
+    let allocatedCents = 0;
+    const rawCents = weights.map((w, idx) => {
+      if (idx === weights.length - 1) {
+        return totalCents - allocatedCents;
+      }
+      const share = Math.round((totalCents * w) / totalWeight);
+      allocatedCents += share;
+      return share;
+    });
+
+    return targetProps.map((prop, idx) => {
+      const unitHint = prop.unitNumber || prop.floor || prop.name;
+      return {
+        id: `bldg-split-${idx + 1}`,
+        amount: (rawCents[idx] / 100).toFixed(2),
+        category: payment.category || "HAUSGELD",
+        tenantId: "NONE",
+        propertyId: prop.id,
+        period: basePeriod,
+        reference: payment.reference
+          ? `${payment.reference} (${unitHint})`
+          : `${payment.payerName} (${unitHint})`,
+      };
+    });
+  };
 
   // Initialisieren beim Öffnen
   useEffect(() => {
@@ -1426,6 +1489,9 @@ function SplitPaymentDialog({
           reference: sp.reference || "",
         }))
       );
+    } else if (buildingProps.length > 1 && payment.category !== "RENT") {
+      // Sammelbuchung für mehrere Wohnungen im selben Haus -> direkt nach m² vorschlagen
+      setSplits(buildBuildingSplits("SQM", buildingProps));
     } else {
       // Neue Aufteilung vorschlagen (Standard: 50 / 50 auf 2 Monate)
       const basePeriod =
@@ -1782,6 +1848,30 @@ function SplitPaymentDialog({
           {/* Preset Buttons */}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <span className="text-xs font-semibold text-muted-foreground">Vorlagen:</span>
+            {buildingProps.length > 1 && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5 border-indigo-500/40 bg-indigo-500/5 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/15"
+                  onClick={() => setSplits(buildBuildingSplits("SQM", buildingProps))}
+                >
+                  <Building2 className="h-3 w-3" />
+                  <span>Alle {buildingProps.length} Einheiten im Haus (nach m²)</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5 border-dashed border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
+                  onClick={() => setSplits(buildBuildingSplits("EQUAL", buildingProps))}
+                >
+                  <Scale className="h-3 w-3" />
+                  <span>Alle {buildingProps.length} Einheiten (gleichmäßig)</span>
+                </Button>
+              </>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -2465,7 +2555,7 @@ function ZahlungenContent() {
 
   const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [properties, setProperties] = useState<Array<{ id: string; name: string; address: string }>>([]);
+  const [properties, setProperties] = useState<PropertyMatchInfo[]>([]);
   const [loans, setLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [accountBalance, setAccountBalance] = useState<{
@@ -3923,11 +4013,36 @@ function ZahlungenContent() {
                                     <Building2 className="h-3 w-3 shrink-0" />
                                     <span>{payment.property.name}</span>
                                   </div>
-                                ) : (
-                                  <span className="text-muted-foreground text-xs italic">
-                                    Nicht zugeordnet
-                                  </span>
-                                )}
+                                ) : (() => {
+                                  const bldgMatch = findBestMatchingProperty(
+                                    `${payment.payerName || ""} ${payment.reference || ""}`,
+                                    properties
+                                  );
+                                  const multiUnits = bldgMatch?.ambiguousBuildingProperties;
+                                  if (multiUnits && multiUnits.length > 1) {
+                                    return (
+                                      <div className="flex flex-col gap-0.5 items-start">
+                                        <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                                          <Building2 className="h-3 w-3 shrink-0" />
+                                          Mehrere Einheiten ({multiUnits.length} im Haus)
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSplitDialogPayment(payment)}
+                                          className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+                                        >
+                                          <Split className="h-3 w-3" />
+                                          Auf alle {multiUnits.length} Wohnungen aufteilen
+                                        </button>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <span className="text-muted-foreground text-xs italic">
+                                      Nicht zugeordnet
+                                    </span>
+                                  );
+                                })()}
                               </TableCell>
 
                               {/* 10. Aktion */}
