@@ -18,6 +18,7 @@ model Property {
   address     String
   sqm         Float    // Quadratmeter
   floor       String?  // Etage
+  unitNumber  String?  // Wohneinheit (z.B. "WE1" oder "WE5, WE6")
   rooms       Float?   // Zimmeranzahl
   
   // Kaufpreis & Investitionsdaten (optional)

@@ -92,6 +92,7 @@ export async function POST(request: Request) {
         address: body.address,
         sqm: parseFloat(body.sqm),
         floor: body.floor || null,
+        unitNumber: typeof body.unitNumber === "string" && body.unitNumber.trim() ? body.unitNumber.trim() : null,
         rooms: body.rooms ? parseFloat(body.rooms) : null,
         purchasePrice: parseOptFloat(body.purchasePrice),
         purchasedAt: body.purchasedAt ? safeDate(body.purchasedAt) : null,

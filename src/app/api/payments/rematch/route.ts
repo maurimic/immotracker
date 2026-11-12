@@ -10,11 +10,14 @@ import { SheetRow } from "@/lib/google-sheets";
  */
 export async function POST() {
   try {
-    const [tenants, loans] = await Promise.all([
+    const [tenants, loans, properties] = await Promise.all([
       prisma.tenant.findMany({
         include: { property: true },
       }),
       prisma.loan.findMany(),
+      prisma.property.findMany({
+        select: { id: true, name: true, address: true, floor: true, unitNumber: true },
+      }),
     ]);
 
     const payments = await prisma.payment.findMany({
@@ -37,7 +40,7 @@ export async function POST() {
         reference: p.reference || undefined,
       };
 
-      const result = await matchTransaction(row, tenants, loans);
+      const result = await matchTransaction(row, tenants, loans, properties);
       const newTenantId = result.tenantId || null;
       const newPropertyId = result.propertyId || null;
       const newLoanId = result.loanId || null;
@@ -69,7 +72,7 @@ export async function POST() {
           },
         });
         updated++;
-        if (p.tenantId !== newTenantId || p.loanId !== newLoanId) {
+        if (p.tenantId !== newTenantId || p.propertyId !== newPropertyId || p.loanId !== newLoanId) {
           reassigned++;
         }
       }

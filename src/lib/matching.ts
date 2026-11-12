@@ -1,11 +1,19 @@
 /**
  * Zweistufige Matching-Pipeline:
- * 1. Regelbasiertes Matching (IBAN / Name) – kostenfrei
+ * 1. Regelbasiertes Matching (IBAN / Darlehen / Hausgeld / Name / Adresse + Wohneinheit) – kostenfrei
  * 2. KI-Fallback via Claude Haiku – bei unklaren Buchungen
  */
 
 import Anthropic from "@anthropic-ai/sdk";
 import { SheetRow } from "./google-sheets";
+
+export interface PropertyInfo {
+  id: string;
+  name: string;
+  address: string;
+  floor?: string | null;
+  unitNumber?: string | null;
+}
 
 export interface Tenant {
   id: string;
@@ -18,7 +26,7 @@ export interface Tenant {
   isCurrent?: boolean;
   moveInDate?: Date | string | null;
   moveOutDate?: Date | string | null;
-  property?: { id: string; name: string; address: string } | null;
+  property?: PropertyInfo | null;
 }
 
 export interface LoanInfo {
@@ -37,6 +45,278 @@ export interface MatchResult {
   confidence: number;
   category: "RENT" | "UTILITY_IN" | "LOAN" | "HAUSGELD" | "REPAIR" | "OTHER";
   aiRawResponse?: string;
+}
+
+/**
+ * Normalisiert deutschen Text für fehlertoleranten Abgleich (Umlaute, ß, Abkürzungen wie Str./Straße)
+ */
+function normalizeText(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/stra(?:ss|ß)e/g, "str")
+    .replace(/str\./g, "str");
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Zerlegt das Feld Wohneinheit (z.B. "WE1", "WE5, WE6", "WE 5 / WE 6", "Whg. 1") in einzelne Token
+ */
+export function parseUnitTokens(rawUnit?: string | null): Array<{ raw: string; prefix?: "WE" | "WHG"; digits?: string }> {
+  if (!rawUnit || !rawUnit.trim()) return [];
+  const parts = rawUnit
+    .split(/[,;/&+|]+|\bund\b/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  return parts.map((raw) => {
+    const normalized = normalizeText(raw).replace(/\s+/g, "");
+    const match = normalized.match(/^(we|whg\.?(?:nr\.?)?|wohnung(?:nr\.?)?|w)?0*(\d+)$/i);
+    let prefix: "WE" | "WHG" | undefined;
+    if (match?.[1]) {
+      const p = match[1].toLowerCase();
+      if (p.startsWith("we") || p === "w") prefix = "WE";
+      else if (p.startsWith("whg") || p.startsWith("wohnung")) prefix = "WHG";
+    }
+    return {
+      raw: normalizeText(raw),
+      prefix,
+      digits: match ? match[2] : undefined,
+    };
+  });
+}
+
+/**
+ * Prüft, ob eine Wohneinheit im Banktext vorkommt und gibt die Passgenauigkeit zurück:
+ * - "EXACT": z.B. "WE1" findet "WE 1" / "91H1W1", oder "Whg. 1" findet "Whg. 1" / "Wohnung Nr. 1"
+ * - "NUMBER": gleiche Ziffer mit anderem Präfix (z.B. "WE 1" vs "Whg 1")
+ */
+function matchesUnitToken(
+  normalizedText: string,
+  token: { raw: string; prefix?: "WE" | "WHG"; digits?: string }
+): "EXACT" | "NUMBER" | null {
+  if (token.digits) {
+    const d = token.digits;
+    const wePatterns = [
+      new RegExp(`\\bwe\\s*0*${d}\\b`, "i"),
+      new RegExp(`\\bwe\\s*0*\\d+\\s*[/&-]+\\s*0*${d}\\b`, "i"),
+      new RegExp(`\\bwe\\s*0*${d}\\s*[/&-]+\\s*0*\\d+\\b`, "i"),
+      new RegExp(`\\b\\d+[a-z]+\\d*w0*${d}\\b`, "i"), // z.B. 91H1W5, 91H1W6, 91H1W1
+    ];
+    const whgPatterns = [
+      new RegExp(`\\bwhg\\.?\\s*(?:nr\\.?\\s*)?0*${d}\\b`, "i"),
+      new RegExp(`\\bwohnung\\s*(?:nr\\.?\\s*)?0*${d}\\b`, "i"),
+    ];
+
+    const weHit = wePatterns.some((rx) => rx.test(normalizedText));
+    const whgHit = whgPatterns.some((rx) => rx.test(normalizedText));
+
+    if (!weHit && !whgHit) return null;
+    if (token.prefix === "WE" && weHit) return "EXACT";
+    if (token.prefix === "WHG" && whgHit) return "EXACT";
+    if (!token.prefix) return "EXACT";
+    return "NUMBER";
+  }
+
+  const compact = token.raw.replace(/\s+/g, "");
+  if (compact.length < 2) return null;
+  return new RegExp(`\\b${escapeRegExp(token.raw)}\\b`, "i").test(normalizedText) ? "EXACT" : null;
+}
+
+/**
+ * Prüft, ob die Etage (z.B. "EG", "2.OG") im Banktext vorkommt
+ */
+function matchesFloorToken(normalizedText: string, floor?: string | null): boolean {
+  if (!floor || !floor.trim()) return false;
+  const f = normalizeText(floor).replace(/\s+/g, "");
+  if (f === "eg" || f === "erdgeschoss") {
+    return /\b(eg|erdgeschoss)\b/i.test(normalizedText);
+  }
+  if (f === "dg" || f === "dachgeschoss") {
+    return /\b(dg|dachgeschoss)\b/i.test(normalizedText);
+  }
+  if (f === "ug" || f === "untergeschoss" || f === "kg") {
+    return /\b(ug|untergeschoss|kg|kellergeschoss)\b/i.test(normalizedText);
+  }
+  const ogMatch = f.match(/^(\d+)\.?og$/);
+  if (ogMatch) {
+    const lvl = ogMatch[1];
+    return new RegExp(`\\b${lvl}\\.?\\s*(?:og|obergeschoss)\\b`, "i").test(normalizedText);
+  }
+  return new RegExp(`\\b${escapeRegExp(normalizeText(floor.trim()))}\\b`, "i").test(normalizedText);
+}
+
+/**
+ * Ermittelt aussagekräftige Straßen-/Ortswörter einer Immobilie
+ */
+function extractAddressKeywords(prop: PropertyInfo): string[] {
+  const genericWords = new Set([
+    "wohnung", "haus", "apartment", "eg", "og", "dg", "ug", "links", "rechts", "mitte",
+    "str", "weg", "platz", "allee", "ring", "gasse", "damm",
+  ]);
+  const combined = `${normalizeText(prop.address)} ${normalizeText(prop.name)}`;
+  const words = combined
+    .replace(/[,.;:/()]/g, " ")
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 4 && !genericWords.has(w) && !/^\d+[a-z]?$/.test(w));
+
+  // Straßen-Stamm ohne "str" ergänzen (z.B. "siemensstr" -> "siemens", "siemenstr" -> "siemen", "bockumweg" -> "bockum")
+  const expanded = new Set<string>(words);
+  for (const w of words) {
+    const stem = w.replace(/(?:str|weg|allee|platz)$/i, "");
+    if (stem.length >= 4) {
+      expanded.add(stem);
+    }
+    // Toleranz für "siemen" vs "siemens"
+    if (stem.startsWith("siemen")) {
+      expanded.add("siemen");
+    }
+  }
+  return Array.from(expanded);
+}
+
+interface PropertyMatchCandidate {
+  property: PropertyInfo;
+  score: number;
+  addressMatched: boolean;
+  unitMatched: boolean;
+  floorMatched: boolean;
+}
+
+/**
+ * Gewichteter Objekt- & Wohneinheits-Abgleich.
+ * Löst Konflikte bei gleichen Wohneinheitsnummern in verschiedenen Häusern (z.B. WE6 in Siemensstraße vs. WE6 in Schwerte)
+ * und unterscheidet mehrere Einheiten im selben Haus (z.B. WE1 vs. WE5/WE6 in Siemensstraße 28).
+ */
+export function findBestMatchingProperty(
+  rawText: string,
+  properties: PropertyInfo[]
+): PropertyMatchCandidate | null {
+  if (properties.length === 0) return null;
+  const text = normalizeText(rawText);
+
+  const candidates: PropertyMatchCandidate[] = properties.map((prop) => {
+    let score = 0;
+    let addressMatched = false;
+    let unitMatched = false;
+    let floorMatched = false;
+
+    const addrNorm = normalizeText(prop.address);
+    const nameNorm = normalizeText(prop.name);
+
+    // 1. Straßen-/Objekt-/Verwaltungs-Abgleich (+100)
+    const keywords = extractAddressKeywords(prop);
+    if (keywords.some((kw) => text.includes(kw))) {
+      score += 100;
+      addressMatched = true;
+    }
+
+    // Bekannte Hausverwaltungen direkt dem jeweiligen Objekt zuordnen
+    if (!addressMatched) {
+      if ((addrNorm.includes("dortmunder") || nameNorm.includes("schwerte")) && text.includes("buechel")) {
+        score += 100;
+        addressMatched = true;
+      } else if ((addrNorm.includes("bockum") || nameNorm.includes("bockum")) && text.includes("schubert")) {
+        score += 100;
+        addressMatched = true;
+      } else if ((addrNorm.includes("siemen") || nameNorm.includes("siemen")) && text.includes("langer")) {
+        score += 100;
+        addressMatched = true;
+      }
+    }
+
+    // 2. Wohneinheit-Abgleich (+65 exakt / +55 Ziffer, +40 pro weiterer passender Einheit wie "WE5/WE6")
+    const unitTokens = parseUnitTokens(prop.unitNumber);
+    let exactMatches = 0;
+    let numberMatches = 0;
+    for (const token of unitTokens) {
+      const m = matchesUnitToken(text, token);
+      if (m === "EXACT") exactMatches++;
+      else if (m === "NUMBER") numberMatches++;
+    }
+    const totalUnitHits = exactMatches + numberMatches;
+    if (totalUnitHits > 0) {
+      const baseUnitScore = exactMatches > 0 ? 65 : 55;
+      score += baseUnitScore + (totalUnitHits - 1) * 40;
+      unitMatched = true;
+      // Tie-Breaker: wenn nur genau eine Wohneinheit im Text steht und keine Straße genannt ist,
+      // bevorzugt ein 1:1 zugeordnetes Einzel-WE-Objekt (z.B. "WE 6" allein -> Schwerte statt "WE5, WE6")
+      if (!addressMatched && unitTokens.length === 1 && totalUnitHits === 1) {
+        score += 10;
+      }
+    } else if (unitTokens.length === 0) {
+      // Abwärtskompatibilität falls unitNumber noch nicht ausgefüllt wurde
+      if (addrNorm.includes("siemen") || nameNorm.includes("siemen")) {
+        if ((prop.floor?.toLowerCase().includes("2") || nameNorm.includes("2.og")) &&
+            (/91h1w[56]/i.test(text) || /\bwe\s*[56]\b/i.test(text))) {
+          score += 50;
+          unitMatched = true;
+        } else if ((prop.floor?.toLowerCase().includes("eg") || nameNorm.includes("eg")) &&
+                   (/91h1w1/i.test(text) || /\bwe\s*1\b/i.test(text))) {
+          score += 50;
+          unitMatched = true;
+        }
+      } else if ((addrNorm.includes("bockum") || nameNorm.includes("bockum")) &&
+                 (/\bwhg\.?\s*1\b/i.test(text) || /\bwohnung\s*(?:nr\.?\s*)?1\b/i.test(text))) {
+        score += 50;
+        unitMatched = true;
+      } else if ((addrNorm.includes("dortmunder") || nameNorm.includes("schwerte")) &&
+                 /\bwe\s*6\b/i.test(text)) {
+        score += 50;
+        unitMatched = true;
+      }
+    }
+
+    // 3. Etage-Abgleich (+30) anhand des Feldes floor oder Namens-Stockwerk
+    if (matchesFloorToken(text, prop.floor)) {
+      score += 30;
+      floorMatched = true;
+    } else if (!prop.floor) {
+      if (nameNorm.includes("2.og") && /\b2\.?\s*(og|obergeschoss)\b/i.test(text)) {
+        score += 30;
+        floorMatched = true;
+      } else if (nameNorm.includes("1.og") && /\b1\.?\s*(og|obergeschoss)\b/i.test(text)) {
+        score += 30;
+        floorMatched = true;
+      } else if (/\beg\b/.test(nameNorm) && /\b(eg|erdgeschoss)\b/i.test(text)) {
+        score += 30;
+        floorMatched = true;
+      }
+    }
+
+    return {
+      property: prop,
+      score,
+      addressMatched,
+      unitMatched,
+      floorMatched,
+    };
+  });
+
+  // Nach höchstem Score sortieren
+  candidates.sort((a, b) => b.score - a.score);
+  const top = candidates[0];
+  if (!top || top.score === 0) return null;
+
+  // Sonderfall: Mehrere Einheiten am selben Haus, Straße getroffen, aber weder WE noch Etage angegeben (z.B. Sammel-Sonderumlage)
+  if (top.addressMatched && !top.unitMatched && !top.floorMatched) {
+    const sameStreetProps = candidates.filter((c) => c.addressMatched && c.score === top.score);
+    if (sameStreetProps.length > 1) {
+      const preferred =
+        sameStreetProps.find((c) => normalizeText(c.property.name).includes("2.og")) ||
+        sameStreetProps[0];
+      return preferred;
+    }
+  }
+
+  return top;
 }
 
 /**
@@ -206,11 +486,25 @@ export function detectPaymentPeriod(
 export function ruleBasedMatch(
   row: SheetRow,
   tenants: Tenant[],
-  loans: LoanInfo[] = []
+  loans: LoanInfo[] = [],
+  properties: PropertyInfo[] = []
 ): MatchResult | null {
   const rowIban = row.iban?.replace(/\s/g, "").toUpperCase();
   const rowName = (row.name || "").toLowerCase().trim();
   const rowRef = (row.reference || "").toLowerCase().trim();
+  const combinedFullText = `${rowName} ${rowRef}`;
+
+  // Alle bekannten Wohnungen aus Parameter + Mieter-Verknüpfungen sammeln
+  const propMap = new Map<string, PropertyInfo>();
+  for (const p of properties) {
+    propMap.set(p.id, p);
+  }
+  for (const t of tenants) {
+    if (t.property && !propMap.has(t.property.id)) {
+      propMap.set(t.property.id, t.property);
+    }
+  }
+  const allProperties = Array.from(propMap.values());
 
   // 1. IBAN-Matching (exakt)
   if (rowIban) {
@@ -221,12 +515,16 @@ export function ruleBasedMatch(
       let best = matches[0];
       if (matches.length > 1) {
         const rowTime = new Date(row.date).getTime();
+        const bestPropMatch = findBestMatchingProperty(combinedFullText, allProperties);
+        const unitMatch = bestPropMatch
+          ? matches.find((t) => t.propertyId === bestPropMatch.property.id)
+          : undefined;
         const dateMatch = matches.find((t) => {
           const inTime = t.moveInDate ? new Date(t.moveInDate).getTime() : -Infinity;
           const outTime = t.moveOutDate ? new Date(t.moveOutDate).getTime() : Infinity;
           return rowTime >= inTime && rowTime <= outTime;
         });
-        best = dateMatch || matches.find((t) => t.isCurrent) || matches[0];
+        best = unitMatch || dateMatch || matches.find((t) => t.isCurrent) || matches[0];
       }
       const category = detectPaymentCategory(rowRef, rowName, row.amount);
       return {
@@ -240,7 +538,7 @@ export function ruleBasedMatch(
     }
   }
 
-  // 2. Darlehens-Annuitäten & Kredite (Verwendungszweck enthält "darlehen" oder Betrag entspricht Darlehensrate)
+  // 2. Darlehens-Annuitäten & Kredite
   const isLoanRef =
     rowRef.includes("darlehen") ||
     rowRef.includes("rechn.zins") ||
@@ -264,7 +562,7 @@ export function ruleBasedMatch(
     };
   }
 
-  // 3. Hausgeld & WEG-Sonderumlagen
+  // 3. Hausgeld & WEG-Sonderumlagen (mit Wohneinheit-, Etage- und Straßen-Gewichtung)
   const isHausgeld =
     rowRef.includes("hausgeld") ||
     rowName.includes("hausgeld") ||
@@ -274,95 +572,13 @@ export function ruleBasedMatch(
     rowName.includes(" weg ");
 
   if (isHausgeld) {
-    const fullText = `${rowName} ${rowRef}`.toLowerCase();
-    let matchedPropId: string | null = null;
-
-    // Sammle alle bekannten Wohnungen aus den übergebenen Mietern
-    const knownProps: Array<{ id: string; name: string; address: string }> = [];
-    const seen = new Set<string>();
-    for (const t of tenants) {
-      if (t.property && !seen.has(t.property.id)) {
-        seen.add(t.property.id);
-        knownProps.push(t.property);
-      }
-    }
-
-    // 1. Spezifischer Check: Schwerte / Alter Dortmunder Weg 4 (WE 6)
-    if (
-      fullText.includes("dortmunder") ||
-      fullText.includes("schwerte") ||
-      fullText.includes("we 6") ||
-      fullText.includes("we6") ||
-      fullText.includes("buechel")
-    ) {
-      const p = knownProps.find(
-        (kp) =>
-          kp.name.toLowerCase().includes("schwerte") ||
-          kp.address.toLowerCase().includes("dortmunder")
-      );
-      if (p) matchedPropId = p.id;
-    }
-    // 2. Spezifischer Check: Bockumweg 17a (Whg. 1)
-    else if (
-      fullText.includes("bockum") ||
-      (fullText.includes("schubert") &&
-        (fullText.includes("17a") ||
-          fullText.includes("whg. 1") ||
-          fullText.includes("wohnung nr. 1") ||
-          fullText.includes("whg 1")))
-    ) {
-      const p = knownProps.find(
-        (kp) =>
-          kp.name.toLowerCase().includes("bockum") ||
-          kp.address.toLowerCase().includes("bockum")
-      );
-      if (p) matchedPropId = p.id;
-    }
-    // 3. Spezifischer Check: Siemensstraße 28 (EG vs. 2.OG)
-    else if (fullText.includes("siemens")) {
-      const is2og =
-        /\b(2\.?\s*og|2\.?\s*obergeschoss|2og)\b/i.test(fullText) ||
-        fullText.includes("91h1w5") ||
-        fullText.includes("91h1w6");
-      const isEg =
-        /\b(eg|erdgeschoss)\b/i.test(fullText) ||
-        fullText.includes("91h1w1");
-
-      if (is2og) {
-        const p = knownProps.find((kp) => kp.name.toLowerCase().includes("2.og"));
-        if (p) matchedPropId = p.id;
-      } else if (isEg) {
-        const p = knownProps.find((kp) => kp.name.toLowerCase().includes("eg"));
-        if (p) matchedPropId = p.id;
-      } else {
-        // Sammel-Sonderumlage WEG Siemensstr. 28 ohne spezifische Etage -> 2.OG (größere Einheit)
-        const p = knownProps.find((kp) => kp.name.toLowerCase().includes("2.og"));
-        if (p) matchedPropId = p.id;
-      }
-    }
-    // 4. Generischer Adress-Check für alle sonstigen Immobilien im Portfolio
-    else {
-      for (const prop of knownProps) {
-        const propAddr = prop.address.toLowerCase();
-        const streetParts = propAddr
-          .replace(/[,.]/g, " ")
-          .split(" ")
-          .map((s) => s.trim())
-          .filter((w) => w.length >= 5);
-
-        if (streetParts.some((part) => fullText.includes(part))) {
-          matchedPropId = prop.id;
-          break;
-        }
-      }
-    }
-
+    const propCandidate = findBestMatchingProperty(combinedFullText, allProperties);
     return {
       tenantId: null,
-      propertyId: matchedPropId,
+      propertyId: propCandidate?.property.id || null,
       loanId: null,
       method: "NAME",
-      confidence: matchedPropId ? 0.95 : 0.85,
+      confidence: propCandidate ? 0.95 : 0.85,
       category: "HAUSGELD",
     };
   }
@@ -388,28 +604,26 @@ export function ruleBasedMatch(
 
   // 5. Name-Matching: Höchste Priorität für Mietername im Zahlungspartner oder Verwendungszweck
   let bestTenantMatch: { tenant: Tenant; score: number } | null = null;
+  const textPropMatch = findBestMatchingProperty(combinedFullText, allProperties);
 
   for (const tenant of tenants) {
     const lastName = tenant.lastName.toLowerCase().trim();
     const firstName = tenant.firstName.toLowerCase().trim();
 
-    // Voller Name im Zahlungspartner
     const inNameFirst = firstName.length >= 3 && rowName.includes(firstName);
     const inNameLast = lastName.length >= 3 && rowName.includes(lastName);
-
-    // Voller Name im Verwendungszweck
     const inRefFirst = firstName.length >= 3 && rowRef.includes(firstName);
     const inRefLast = lastName.length >= 3 && rowRef.includes(lastName);
 
     let score = 0;
     if (inNameFirst && inNameLast) {
-      score = 1.0; // Exakter Vor- und Nachname im Zahler
+      score = 1.0;
     } else if (inNameLast) {
-      score = 0.88; // Nachname im Zahler
+      score = 0.88;
     } else if (inRefFirst && inRefLast) {
-      score = 0.95; // Exakter Name im Verwendungszweck
+      score = 0.95;
     } else if (inRefLast) {
-      score = 0.80; // Nachname im Verwendungszweck
+      score = 0.80;
     }
 
     if (score >= 0.80) {
@@ -420,6 +634,9 @@ export function ruleBasedMatch(
         score += 0.05;
       } else if (tenant.isCurrent) {
         score += 0.02;
+      }
+      if (textPropMatch && tenant.propertyId === textPropMatch.property.id) {
+        score += 0.1;
       }
     }
 
@@ -435,12 +652,12 @@ export function ruleBasedMatch(
       propertyId: bestTenantMatch.tenant.propertyId,
       loanId: null,
       method: "NAME",
-      confidence: bestTenantMatch.score,
+      confidence: Math.min(1.0, bestTenantMatch.score),
       category,
     };
   }
 
-  // 6. Eigentümer-Einlagen & Privat-Transfers (nur wenn KEIN Mieter im Zweck steht)
+  // 6. Eigentümer-Einlagen & Privat-Transfers
   const ownerKeywords = [
     "einlage",
     "steven buraje poggel",
@@ -459,11 +676,12 @@ export function ruleBasedMatch(
     };
   }
 
-  // 7. Grundsteuer
-  if (rowRef.includes("grundsteuer")) {
+  // 7. Grundsteuer / Grundbesitzabgaben
+  if (rowRef.includes("grundsteuer") || rowRef.includes("grundbesitzabgab")) {
+    const propCandidate = findBestMatchingProperty(combinedFullText, allProperties);
     return {
       tenantId: null,
-      propertyId: null,
+      propertyId: propCandidate?.addressMatched || propCandidate?.unitMatched ? propCandidate.property.id : null,
       loanId: null,
       method: "NAME",
       confidence: 0.95,
@@ -478,76 +696,42 @@ export function ruleBasedMatch(
     "engie", "eon", "vattenfall", "stadtgas", "fernwärme", "schwerte",
   ];
   if (utilityKeywords.some((kw) => rowName.includes(kw) || rowRef.includes(kw))) {
+    const propCandidate = findBestMatchingProperty(combinedFullText, allProperties);
     return {
       tenantId: null,
-      propertyId: null,
+      propertyId: propCandidate?.addressMatched || propCandidate?.unitMatched ? propCandidate.property.id : null,
       loanId: null,
-      method: "UNMATCHED",
-      confidence: 0.75,
+      method: propCandidate ? "NAME" : "UNMATCHED",
+      confidence: propCandidate ? 0.85 : 0.75,
       category: "UTILITY_IN",
     };
   }
 
-  // 9. Wohnungs- / Adress-Matching im Verwendungszweck & Zahlungspartner
-  for (const tenant of tenants) {
-    if (tenant.property) {
-      const propName = tenant.property.name.toLowerCase().trim();
-      const propAddress = tenant.property.address.toLowerCase().trim();
-      const combinedText = `${rowRef} ${rowName}`.toLowerCase();
+  // 9. Wohnungs-, Wohneinheits- & Adress-Matching im Verwendungszweck & Zahlungspartner
+  const directPropMatch = findBestMatchingProperty(combinedFullText, allProperties);
+  if (directPropMatch && (directPropMatch.addressMatched || directPropMatch.unitMatched)) {
+    const matchedProp = directPropMatch.property;
+    // Prüfe ob im selben Haus mehrere Wohnungen existieren -> fordere WE/Etage wenn eindeutig nötig
+    const sameBuildingCount = allProperties.filter((p) => {
+      if (p.id === matchedProp.id) return false;
+      const k1 = extractAddressKeywords(matchedProp);
+      const k2 = extractAddressKeywords(p);
+      return k1.some((w) => k2.includes(w));
+    }).length;
 
-      // Straße und Hausnummer aus Adresse
-      const streetWords = propAddress
-        .replace(/[,.]/g, " ")
-        .split(" ")
-        .map((s) => s.trim())
-        .filter((w) => w.length >= 5);
+    if (sameBuildingCount === 0 || directPropMatch.unitMatched || directPropMatch.floorMatched) {
+      const category = detectPaymentCategory(rowRef, rowName, row.amount);
+      const activeTenant = tenants.find((t) => t.propertyId === matchedProp.id && t.isCurrent)
+        || tenants.find((t) => t.propertyId === matchedProp.id);
 
-      const matchedStreet = streetWords.some((sw) => combinedText.includes(sw));
-      const matchedPropName = propName.length >= 4 && combinedText.includes(propName);
-
-      if (matchedStreet || matchedPropName) {
-        // Prüfe ob mehrere Mieter an derselben Straße/Hausnummer wohnen
-        const otherTenantsSameStreet = tenants.filter(
-          (ot) =>
-            ot.id !== tenant.id &&
-            ot.property &&
-            streetWords.some((sw) => ot.property!.address.toLowerCase().includes(sw))
-        );
-
-        if (otherTenantsSameStreet.length > 0) {
-          // Mehrere Mieter im selben Gebäude!
-          const unitWords = propName
-            .replace(/[,.]/g, " ")
-            .split(" ")
-            .map((s) => s.trim().toLowerCase())
-            .filter((w) => ["eg", "og", "1.og", "2.og", "3.og", "dg", "whg", "whg1", "whg2"].includes(w));
-
-          const matchedUnit = unitWords.some((uw) => combinedText.includes(uw));
-          if (matchedUnit) {
-            const category = detectPaymentCategory(rowRef, rowName, row.amount);
-            return {
-              tenantId: row.amount > 0 ? tenant.id : null,
-              propertyId: tenant.propertyId,
-              loanId: null,
-              method: "NAME",
-              confidence: 0.85,
-              category,
-            };
-          }
-          continue;
-        }
-
-        // Einziger Mieter an dieser Adresse
-        const category = detectPaymentCategory(rowRef, rowName, row.amount);
-        return {
-          tenantId: row.amount > 0 ? tenant.id : null,
-          propertyId: tenant.propertyId,
-          loanId: null,
-          method: "NAME",
-          confidence: 0.85,
-          category,
-        };
-      }
+      return {
+        tenantId: row.amount > 0 && activeTenant ? activeTenant.id : null,
+        propertyId: matchedProp.id,
+        loanId: null,
+        method: "NAME",
+        confidence: directPropMatch.unitMatched ? 0.92 : 0.85,
+        category,
+      };
     }
   }
 
@@ -573,6 +757,8 @@ export async function aiMatch(
     name: `${t.firstName} ${t.lastName}`,
     iban: t.iban,
     propertyId: t.propertyId,
+    propertyName: t.property?.name,
+    unitNumber: t.property?.unitNumber,
   }));
 
   const prompt = `Du bist ein Buchhalter für Mietwohnungen. Ordne die folgende Bankbuchung einem Mieter zu.
@@ -604,11 +790,10 @@ Antworte NUR mit einem JSON-Objekt ohne zusätzlichen Text:
     });
 
     const text = message.content[0].type === "text" ? message.content[0].text : "";
-    
-    // JSON aus der Antwort extrahieren
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("Kein JSON in Antwort");
-    
+
     const result = JSON.parse(jsonMatch[0]);
     const tenant = result.tenantId ? tenants.find((t) => t.id === result.tenantId) : null;
 
@@ -638,14 +823,13 @@ Antworte NUR mit einem JSON-Objekt ohne zusätzlichen Text:
 export async function matchTransaction(
   row: SheetRow,
   tenants: Tenant[],
-  loans: LoanInfo[] = []
+  loans: LoanInfo[] = [],
+  properties: PropertyInfo[] = []
 ): Promise<MatchResult> {
-  // Stufe 1: Regelbasiert
-  const ruleResult = ruleBasedMatch(row, tenants, loans);
+  const ruleResult = ruleBasedMatch(row, tenants, loans, properties);
   if (ruleResult && ruleResult.confidence >= 0.75) {
     return ruleResult;
   }
 
-  // Stufe 2: KI-Fallback
   return aiMatch(row, tenants);
 }

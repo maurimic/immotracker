@@ -92,9 +92,12 @@ export async function syncGoogleSheetsPayments(): Promise<PaymentsSyncResult> {
   }
 
   activePaymentsSyncPromise = (async () => {
-    const [tenants, loans, rows] = await Promise.all([
+    const [tenants, loans, properties, rows] = await Promise.all([
       prisma.tenant.findMany({ include: { property: true } }),
       prisma.loan.findMany(),
+      prisma.property.findMany({
+        select: { id: true, name: true, address: true, floor: true, unitNumber: true },
+      }),
       fetchSheetTransactions(),
     ]);
 
@@ -117,7 +120,7 @@ export async function syncGoogleSheetsPayments(): Promise<PaymentsSyncResult> {
         continue;
       }
 
-      const result = await matchTransaction(row, tenants, loans);
+      const result = await matchTransaction(row, tenants, loans, properties);
       if (result.method === "AI") aiUsed++;
       if (result.tenantId || result.loanId) matched++;
 

@@ -51,6 +51,11 @@ export async function ensureSchema() {
         `ALTER TABLE "properties" ADD COLUMN "otherAncillaryCosts" REAL;`
       );
     }
+    if (!colNames.has("unitNumber")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "unitNumber" TEXT;`
+      );
+    }
 
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS "property_investments" (

@@ -61,6 +61,7 @@ interface Property {
   address: string;
   sqm: number;
   floor?: string;
+  unitNumber?: string | null;
   rooms?: number;
   purchasePrice?: number | null;
   purchasedAt?: string | null;
@@ -447,6 +448,7 @@ function EditPropertyDialog({
     address: property.address,
     sqm: property.sqm.toString(),
     floor: property.floor || "",
+    unitNumber: property.unitNumber || "",
     rooms: property.rooms ? property.rooms.toString() : "",
     purchasePrice: property.purchasePrice ? property.purchasePrice.toString() : "",
     purchasedAt: property.purchasedAt ? property.purchasedAt.split("T")[0] : "",
@@ -518,7 +520,7 @@ function EditPropertyDialog({
                 required
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Wohnfläche (m²) *</Label>
                 <Input
@@ -530,14 +532,6 @@ function EditPropertyDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Etage</Label>
-                <Input
-                  value={form.floor}
-                  onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                  placeholder="z.B. 1. OG"
-                />
-              </div>
-              <div className="space-y-1">
                 <Label className="text-xs">Zimmer</Label>
                 <Input
                   type="number"
@@ -546,6 +540,25 @@ function EditPropertyDialog({
                   onChange={(e) => setForm({ ...form, rooms: e.target.value })}
                   placeholder="z.B. 2.5"
                 />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Etage / Stockwerk</Label>
+                <Input
+                  value={form.floor}
+                  onChange={(e) => setForm({ ...form, floor: e.target.value })}
+                  placeholder="z.B. EG oder 2.OG"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Wohneinheit (WE)</Label>
+                <Input
+                  value={form.unitNumber}
+                  onChange={(e) => setForm({ ...form, unitNumber: e.target.value })}
+                  placeholder="z.B. WE1 oder WE5, WE6"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Für eindeutigen Bankabgleich (z. B. bei Hausgeld)
+                </p>
               </div>
             </div>
           </div>
@@ -1696,12 +1709,21 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
             <div className="min-w-0">
               <h3 className="font-semibold text-sm leading-tight truncate">{property.name}</h3>
               <p className="text-xs text-muted-foreground mt-0.5 truncate">{property.address}</p>
-              {(property.floor || property.rooms) && (
-                <p className="text-[11px] text-muted-foreground/80 mt-0.5 truncate">
-                  {property.floor ? `${property.floor}` : ""}
-                  {property.floor && property.rooms ? " · " : ""}
-                  {property.rooms ? `${property.rooms} Zimmer` : ""}
-                </p>
+              {(property.floor || property.unitNumber || property.rooms) && (
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground/80 mt-0.5">
+                  {(property.floor || property.rooms) && (
+                    <span className="truncate">
+                      {[property.floor, property.rooms ? `${property.rooms} Zimmer` : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
+                  {property.unitNumber && (
+                    <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0 font-mono text-primary border-primary/30 bg-primary/5">
+                      {property.unitNumber}
+                    </Badge>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -2256,6 +2278,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
     address: "",
     sqm: "",
     floor: "",
+    unitNumber: "",
     rooms: "",
     // Kaufpreis & Nebenkosten (optional)
     purchasePrice: "",
@@ -2293,6 +2316,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
       address: form.address,
       sqm: form.sqm,
       floor: form.floor || null,
+      unitNumber: form.unitNumber || null,
       rooms: form.rooms || null,
       purchasePrice: form.purchasePrice ? parseFloat(form.purchasePrice) : null,
       purchasedAt: form.purchasedAt || null,
@@ -2344,6 +2368,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
         address: "",
         sqm: "",
         floor: "",
+        unitNumber: "",
         rooms: "",
         purchasePrice: "",
         purchasedAt: "",
@@ -2419,7 +2444,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 required
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Wohnfläche (m²) *</Label>
                 <Input
@@ -2432,14 +2457,6 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Etage</Label>
-                <Input
-                  placeholder="2. OG"
-                  value={form.floor}
-                  onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
                 <Label className="text-xs">Zimmer</Label>
                 <Input
                   type="number"
@@ -2448,6 +2465,25 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                   value={form.rooms}
                   onChange={(e) => setForm({ ...form, rooms: e.target.value })}
                 />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Etage / Stockwerk</Label>
+                <Input
+                  placeholder="z.B. EG oder 2.OG"
+                  value={form.floor}
+                  onChange={(e) => setForm({ ...form, floor: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Wohneinheit (WE)</Label>
+                <Input
+                  placeholder="z.B. WE1 oder WE5, WE6"
+                  value={form.unitNumber}
+                  onChange={(e) => setForm({ ...form, unitNumber: e.target.value })}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Für eindeutigen Bankabgleich (z. B. bei Hausgeld)
+                </p>
               </div>
             </div>
           </div>

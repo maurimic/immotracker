@@ -127,8 +127,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Keine gültigen Zeilen in der CSV gefunden" }, { status: 400 });
     }
 
-    // Fetch active tenants and loans for matching
-    const [dbTenants, loans] = await Promise.all([
+    // Fetch active tenants, loans, and properties for matching
+    const [dbTenants, loans, properties] = await Promise.all([
       prisma.tenant.findMany({
         select: {
           id: true,
@@ -139,6 +139,9 @@ export async function POST(request: Request) {
         },
       }),
       prisma.loan.findMany(),
+      prisma.property.findMany({
+        select: { id: true, name: true, address: true, floor: true, unitNumber: true },
+      }),
     ]);
 
     const matchingTenants: MatchingTenant[] = dbTenants.map((t) => ({
@@ -177,7 +180,7 @@ export async function POST(request: Request) {
         reference: row.reference,
       };
 
-      let match = ruleBasedMatch(sheetRow, matchingTenants, loans);
+      let match = ruleBasedMatch(sheetRow, matchingTenants, loans, properties);
       if (!match && process.env.ANTHROPIC_API_KEY) {
         match = await aiMatch(sheetRow, matchingTenants);
       }

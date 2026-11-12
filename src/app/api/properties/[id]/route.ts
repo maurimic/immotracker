@@ -69,6 +69,7 @@ export async function PUT(
         address: body.address,
         sqm: body.sqm ? parseFloat(body.sqm) : undefined,
         floor: body.floor !== undefined ? body.floor : undefined,
+        unitNumber: body.unitNumber !== undefined ? (typeof body.unitNumber === "string" && body.unitNumber.trim() ? body.unitNumber.trim() : null) : undefined,
         rooms: body.rooms !== undefined ? (body.rooms ? parseFloat(body.rooms) : null) : undefined,
         purchasePrice: body.purchasePrice !== undefined ? (body.purchasePrice ? parseFloat(body.purchasePrice) : null) : undefined,
         purchasedAt: body.purchasedAt !== undefined ? safeDate(body.purchasedAt) : undefined,
