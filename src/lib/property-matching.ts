@@ -12,6 +12,7 @@ export interface PropertyMatchInfo {
   hausgeld?: number | null;
   maintenanceReserve?: number | null;
   hausgeldDetails?: string | null;
+  unitDetails?: string | null;
 }
 
 export interface PropertyMatchCandidate {

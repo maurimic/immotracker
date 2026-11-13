@@ -75,6 +75,7 @@ interface Payment {
     hausgeld?: number | null;
     maintenanceReserve?: number | null;
     hausgeldDetails?: string | null;
+    unitDetails?: string | null;
   } | null;
   loanId?: string | null;
   loan?: {
@@ -1070,7 +1071,13 @@ function EditPaymentDialog({
 }: {
   payment: Payment;
   tenants: Tenant[];
-  properties: Array<{ id: string; name: string; address: string }>;
+  properties: Array<{
+    id: string;
+    name: string;
+    address: string;
+    hausgeld?: number | null;
+    maintenanceReserve?: number | null;
+  }>;
   loans: Array<{ id: string; label: string; bank?: string | null; monthlyPayment: number; propertyId: string; property?: { name: string } }>;
   onUpdated: () => void;
 }) {
@@ -3931,11 +3938,24 @@ function ZahlungenContent() {
                                 {isRent && soll !== null ? (
                                   <div>
                                     <span className="font-semibold text-foreground">{formatCurrency(soll)}</span>
-                                    {resolvedRent?.isAdjusted && (
+                                    {resolvedRent?.isAdjusted ? (
                                       <div className="text-[10px] text-blue-600 dark:text-blue-400 font-normal" title={resolvedRent.adjustmentNote || ""}>
                                         Historischer Soll
                                       </div>
-                                    )}
+                                    ) : matchedProperty?.unitDetails ? (() => {
+                                      try {
+                                        const uDetails = typeof matchedProperty.unitDetails === "string" ? JSON.parse(matchedProperty.unitDetails) : matchedProperty.unitDetails;
+                                        const parts = Object.entries(uDetails).map(([k, v]: [string, any]) => `${k}: ${formatCurrency(v.warmRent || (v.coldRent + (v.utilities || 0)))}`);
+                                        if (parts.length > 1) {
+                                          return (
+                                            <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal truncate max-w-[170px] ml-auto" title={parts.join(" + ")}>
+                                              {parts.join(" + ")}
+                                            </div>
+                                          );
+                                        }
+                                      } catch {}
+                                      return null;
+                                    })() : null}
                                   </div>
                                 ) : isLoan && soll !== null ? (
                                   <div>

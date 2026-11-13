@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Fragment } from "react";
 import Link from "next/link";
 import {
   ReceiptText,
@@ -28,6 +28,8 @@ import {
   Calculator,
   Hammer,
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,7 @@ interface Property {
   brokerCosts?: number | null;
   otherAncillaryCosts?: number | null;
   buildingSharePercent?: number | null;
+  unitDetails?: string | null;
   investments?: Array<{
     id: string;
     title: string;
@@ -137,6 +140,7 @@ export default function SteuernPage() {
   const [buildingSharePercent, setBuildingSharePercent] = useState<number>(75); // 75% Gebäude, 25% Grund und Boden
   const [afaRatePercent, setAfaRatePercent] = useState<number>(2.0); // 2,0% linear p.a.
   const [copiedLine, setCopiedLine] = useState<string | null>(null);
+  const [expandedCompoundProps, setExpandedCompoundProps] = useState<Record<string, boolean>>({ all: true });
 
   // Zusätzliche abzugsfähige Werbungskosten (individuelle Pauschalen / Eingaben)
   const [drivenKm, setDrivenKm] = useState<number>(180); // Fahrten zum Objekt / WEG (0,30 € / km)
@@ -323,11 +327,79 @@ export default function SteuernPage() {
       const pExp = pInterest + pMaint + pAfa + pOps + pAdmin;
       const pNet = pRev - pExp;
 
+      // Sub-Units Aufteilung (falls Verbundwohnung wie z. B. WE5 & WE6)
+      let subUnitsList: Array<{
+        key: string;
+        unitNumber?: string;
+        name: string;
+        sqm: number;
+        rent: number;
+        utilities: number;
+        totalRev: number;
+        interest: number;
+        maintenance: number;
+        afa: number;
+        operating: number;
+        admin: number;
+        totalExp: number;
+        netIncome: number;
+        purchasePrice?: number;
+        purchasedAt?: string;
+      }> | undefined = undefined;
+
+      if (prop.unitDetails) {
+        try {
+          const parsed = typeof prop.unitDetails === "string" ? JSON.parse(prop.unitDetails) : prop.unitDetails;
+          const uEntries = Object.values(parsed) as any[];
+          if (uEntries.length > 1) {
+            const totalSubPrice = uEntries.reduce((s, u) => s + (u.purchasePrice || 0), 0);
+            const totalSubSqm = uEntries.reduce((s, u) => s + (u.sqm || 0), 0) || prop.sqm;
+
+            subUnitsList = uEntries.map((u) => {
+              const uRent = (u.coldRent || 0) * 12;
+              const uUtils = (u.utilities || 0) * 12;
+              const uRev = uRent + uUtils;
+
+              const priceRatio = totalSubPrice > 0 ? (u.purchasePrice || 0) / totalSubPrice : ((u.sqm || 0) / totalSubSqm);
+              const uInterest = pInterest * priceRatio;
+              const uMaint = pMaint * priceRatio;
+              const uAfa = (u.purchasePrice || 0) > 0
+                ? (u.purchasePrice || 0) * (buildingSharePercent / 100) * (afaRatePercent / 100)
+                : (pAfa * priceRatio);
+              const uOps = uUtils * 0.95;
+              const uAdmin = pAdmin * priceRatio;
+              const uExp = uInterest + uMaint + uAfa + uOps + uAdmin;
+              const uNet = uRev - uExp;
+
+              return {
+                key: u.key || u.unitNumber,
+                unitNumber: u.unitNumber,
+                name: u.name || `${prop.name} (${u.unitNumber || u.key})`,
+                sqm: u.sqm || 0,
+                rent: uRent,
+                utilities: uUtils,
+                totalRev: uRev,
+                interest: uInterest,
+                maintenance: uMaint,
+                afa: uAfa,
+                operating: uOps,
+                admin: uAdmin,
+                totalExp: uExp,
+                netIncome: uNet,
+                purchasePrice: u.purchasePrice,
+                purchasedAt: u.purchasedAt,
+              };
+            });
+          }
+        } catch {}
+      }
+
       return {
         id: prop.id,
         name: prop.name,
         address: prop.address,
         sqm: prop.sqm,
+        unitDetails: prop.unitDetails,
         tenant: prop.tenant ? `${prop.tenant.firstName} ${prop.tenant.lastName}` : "Leerstand",
         rent: pRent,
         utilities: pUtils,
@@ -339,6 +411,7 @@ export default function SteuernPage() {
         admin: pAdmin,
         totalExp: pExp,
         netIncome: pNet,
+        subUnits: subUnitsList,
       };
     });
 
@@ -1477,47 +1550,148 @@ Mieter: ${item.tenant}
                         });
                       };
 
+                      const hasSubUnits = item.subUnits && item.subUnits.length > 1;
+                      const isExpanded = expandedCompoundProps[item.id] !== false;
+
+                      const copySubSummary = (sub: NonNullable<typeof item.subUnits>[number]) => {
+                        const txt = `
+=== ANLAGE V FÜR EINHEIT: ${(sub.name || sub.key).toUpperCase()} ===
+Wohneinheit: ${sub.unitNumber || sub.key} (${sub.sqm} m²)
+Hauptadresse: ${item.address}
+• Zeile 9-11 (Kaltmiete): ${sub.rent.toFixed(2)} €
+• Zeile 13 (Umlagen): ${sub.utilities.toFixed(2)} €
+→ Summe Einnahmen: ${sub.totalRev.toFixed(2)} €
+• Zeile 33 (Schuldzinsen anteilig): ${sub.interest.toFixed(2)} €
+• Zeile 37 (AfA Abschreibung): ${sub.afa.toFixed(2)} €
+• Zeile 39 (Erhaltungsaufwand anteilig): ${sub.maintenance.toFixed(2)} €
+• Zeile 46 (Betriebskosten): ${sub.operating.toFixed(2)} €
+• Zeile 47 (Verwaltung anteilig): ${sub.admin.toFixed(2)} €
+→ Summe Werbungskosten: ${sub.totalExp.toFixed(2)} €
+★ STEUERLICHES NETTOERGEBNIS DIESER EINHEIT: ${sub.netIncome.toFixed(2)} €
+                        `.trim();
+                        navigator.clipboard.writeText(txt);
+                        toast({
+                          title: `Werte für "${sub.unitNumber || sub.key}" kopiert`,
+                          description: `Separate Anlage V für ${sub.name} in die Zwischenablage gelegt.`,
+                        });
+                      };
+
                       return (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-semibold text-sm">
-                            <div>{item.name}</div>
-                            <div className="text-xs text-muted-foreground">{item.address} • {item.sqm} m²</div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {formatCurrency(item.rent)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {formatCurrency(item.utilities)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm text-amber-500">
-                            {formatCurrency(item.interest)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm text-amber-500">
-                            {formatCurrency(item.afa)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm text-amber-500">
-                            {formatCurrency(item.maintenance)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm text-amber-500">
-                            {formatCurrency(item.operating)}
-                          </TableCell>
-                          <TableCell className={`text-right font-mono font-bold text-sm ${
-                            item.netIncome >= 0 ? "text-green-500" : "text-blue-500"
-                          }`}>
-                            {formatCurrency(item.netIncome)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs gap-1"
-                              onClick={copyPropSummary}
-                              title="Werte dieser Wohnung kopieren"
-                            >
-                              <Copy className="h-3 w-3" /> Kopieren
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                        <Fragment key={item.id}>
+                          <TableRow className={hasSubUnits ? "bg-muted/30" : ""}>
+                            <TableCell className="font-semibold text-sm">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span>{item.name}</span>
+                                {hasSubUnits && (
+                                  <>
+                                    <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-300">
+                                      Verbund ({item.subUnits!.length} Einheiten)
+                                    </Badge>
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedCompoundProps((prev) => ({ ...prev, [item.id]: !isExpanded }))}
+                                      className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-0.5 ml-1 font-normal"
+                                    >
+                                      {isExpanded ? (
+                                        <>
+                                          <ChevronUp className="h-3 w-3" /> Zuklappen
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ChevronDown className="h-3 w-3" /> Aufteilen ({item.subUnits!.map(u => u.unitNumber || u.key).join(", ")})
+                                        </>
+                                      )}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{item.address} • {item.sqm} m² {hasSubUnits ? "(gesamt)" : ""}</div>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {formatCurrency(item.rent)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {formatCurrency(item.utilities)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-amber-500">
+                              {formatCurrency(item.interest)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-amber-500">
+                              {formatCurrency(item.afa)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-amber-500">
+                              {formatCurrency(item.maintenance)}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-amber-500">
+                              {formatCurrency(item.operating)}
+                            </TableCell>
+                            <TableCell className={`text-right font-mono font-bold text-sm ${
+                              item.netIncome >= 0 ? "text-green-500" : "text-blue-500"
+                            }`}>
+                              {formatCurrency(item.netIncome)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1"
+                                onClick={copyPropSummary}
+                                title={hasSubUnits ? "Gesamte Anlage V kopieren" : "Werte dieser Wohnung kopieren"}
+                              >
+                                <Copy className="h-3 w-3" /> {hasSubUnits ? "Gesamt" : "Kopieren"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          {hasSubUnits && isExpanded && item.subUnits!.map((sub) => (
+                            <TableRow key={`${item.id}-${sub.key}`} className="bg-indigo-50/20 dark:bg-indigo-950/15 border-l-2 border-l-indigo-500 text-xs">
+                              <TableCell className="pl-6">
+                                <div className="font-medium flex items-center gap-1.5 text-xs">
+                                  <span className="text-indigo-600 dark:text-indigo-400 font-bold text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40">
+                                    {sub.unitNumber || sub.key}
+                                  </span>
+                                  <span>{sub.name}</span>
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">
+                                  {sub.sqm} m² {sub.purchasePrice ? `• Notar: ${formatCurrency(sub.purchasePrice)}` : ""}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs">
+                                {formatCurrency(sub.rent)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs">
+                                {formatCurrency(sub.utilities)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs text-amber-500">
+                                {formatCurrency(sub.interest)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs text-amber-500">
+                                {formatCurrency(sub.afa)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs text-amber-500">
+                                {formatCurrency(sub.maintenance)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-xs text-amber-500">
+                                {formatCurrency(sub.operating)}
+                              </TableCell>
+                              <TableCell className={`text-right font-mono font-semibold text-xs ${
+                                sub.netIncome >= 0 ? "text-green-500" : "text-blue-500"
+                              }`}>
+                                {formatCurrency(sub.netIncome)}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-[10px] gap-1 px-2 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                                  onClick={() => copySubSummary(sub)}
+                                  title={`Separate Anlage V für ${sub.unitNumber || sub.key} kopieren`}
+                                >
+                                  <Copy className="h-2.5 w-2.5" /> {sub.unitNumber || sub.key}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </Fragment>
                       );
                     })}
                   </TableBody>
@@ -1623,31 +1797,86 @@ Mieter: ${item.tenant}
                       const buildingVal = hasPrice ? basePrice * (buildingSharePercent / 100) : (p.sqm * 2000 * (buildingSharePercent / 100));
                       const afaVal = buildingVal * (afaRatePercent / 100);
 
+                      let subUnitsList: any[] = [];
+                      if (p.unitDetails) {
+                        try {
+                          const parsed = typeof p.unitDetails === "string" ? JSON.parse(p.unitDetails) : p.unitDetails;
+                          const values = Object.values(parsed) as any[];
+                          if (values.length > 1) {
+                            subUnitsList = values;
+                          }
+                        } catch {}
+                      }
+
                       return (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-semibold text-sm">
-                            <div>{p.name}</div>
-                            <div className="text-xs text-muted-foreground">{p.address}</div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {p.purchasePrice ? formatCurrency(p.purchasePrice) : (
-                              <span className="text-xs text-muted-foreground italic">nicht hinterlegt</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {p.ancillaryCosts ? formatCurrency(p.ancillaryCosts) : "–"}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm font-medium">
-                            {formatCurrency(buildingVal)}
-                            {!hasPrice && <span className="block text-[10px] text-amber-500">(geschätzt)</span>}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {afaRatePercent}%
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-bold text-sm text-primary">
-                            {formatCurrency(afaVal)}
-                          </TableCell>
-                        </TableRow>
+                        <Fragment key={p.id}>
+                          <TableRow className={subUnitsList.length > 1 ? "bg-muted/30" : ""}>
+                            <TableCell className="font-semibold text-sm">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span>{p.name}</span>
+                                {subUnitsList.length > 1 && (
+                                  <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-300">
+                                    Verbund ({subUnitsList.length} Einheiten)
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{p.address}</div>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {p.purchasePrice ? formatCurrency(p.purchasePrice) : (
+                                <span className="text-xs text-muted-foreground italic">nicht hinterlegt</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {p.ancillaryCosts ? formatCurrency(p.ancillaryCosts) : "–"}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm font-medium">
+                              {formatCurrency(buildingVal)}
+                              {!hasPrice && <span className="block text-[10px] text-amber-500">(geschätzt)</span>}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {afaRatePercent}%
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold text-sm text-primary">
+                              {formatCurrency(afaVal)}
+                            </TableCell>
+                          </TableRow>
+                          {subUnitsList.length > 1 && subUnitsList.map((u) => {
+                            const uBasePrice = (u.purchasePrice || 0);
+                            const uBuildingVal = uBasePrice * (buildingSharePercent / 100);
+                            const uAfaVal = uBuildingVal * (afaRatePercent / 100);
+                            return (
+                              <TableRow key={`${p.id}-${u.key}`} className="bg-indigo-50/20 dark:bg-indigo-950/15 border-l-2 border-l-indigo-500 text-xs">
+                                <TableCell className="pl-6">
+                                  <div className="font-medium flex items-center gap-1.5 text-xs">
+                                    <span className="text-indigo-600 dark:text-indigo-400 font-bold text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40">
+                                      {u.unitNumber || u.key}
+                                    </span>
+                                    <span>{u.name || u.key}</span>
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {u.sqm} m² {u.purchasedAt ? `• Notar: ${formatDate(u.purchasedAt)}` : ""}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-xs">
+                                  {u.purchasePrice ? formatCurrency(u.purchasePrice) : "–"}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                                  –
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-xs font-medium text-foreground">
+                                  {formatCurrency(uBuildingVal)}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-xs">
+                                  {afaRatePercent}%
+                                </TableCell>
+                                <TableCell className="text-right font-mono font-semibold text-xs text-indigo-600 dark:text-indigo-400">
+                                  {formatCurrency(uAfaVal)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </Fragment>
                       );
                     })}
                     <TableRow className="bg-secondary/40 font-bold">

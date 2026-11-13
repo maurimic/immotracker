@@ -66,6 +66,11 @@ export async function ensureSchema() {
         `ALTER TABLE "properties" ADD COLUMN "hausgeldDetails" TEXT;`
       );
     }
+    if (!colNames.has("unitDetails")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "unitDetails" TEXT;`
+      );
+    }
 
     // Standard-Wohneinheiten einmalig setzen, sofern noch nicht initialisiert
     const seedCheck = (await prisma.$queryRawUnsafe<any[]>(
@@ -139,6 +144,70 @@ export async function ensureSchema() {
       await prisma.$executeRawUnsafe(`
         INSERT OR IGNORE INTO "app_settings" ("key", "value", "updatedAt")
         VALUES ('hausgeld_seeded', '1', CURRENT_TIMESTAMP);
+      `);
+    }
+
+    // Untereinheiten für Verbundwohnungen initialisieren
+    const unitDetailsSeedCheck = (await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "value" FROM "app_settings" WHERE "key" = 'unit_details_seeded_v1' LIMIT 1;`
+    )) || [];
+    if (unitDetailsSeedCheck.length === 0) {
+      const siemensUnitDetails = JSON.stringify({
+        WE5: {
+          key: "WE5",
+          unitNumber: "WE05",
+          name: "Siemensstraße 28 2.OG links",
+          floor: "2.OG links",
+          sqm: 42,
+          rentSqm: 41,
+          purchasePrice: 52500,
+          purchasedAt: "2023-02-22",
+          possessionAt: "2023-04-01",
+          coldRent: 290,
+          heating: 90,
+          operatingCosts: 170,
+          utilities: 260,
+          warmRent: 550,
+          hausgeld: 215,
+          maintenanceReserve: 18.97,
+          totalWeg: 233.97
+        },
+        WE6: {
+          key: "WE6",
+          unitNumber: "WE06",
+          name: "Siemensstraße 28 2.OG rechts",
+          floor: "2.OG rechts",
+          sqm: 55,
+          rentSqm: 55,
+          purchasePrice: 62500,
+          purchasedAt: "2023-02-28",
+          possessionAt: "2023-04-01",
+          coldRent: 341,
+          heating: 130,
+          operatingCosts: 210,
+          utilities: 340,
+          warmRent: 681,
+          hausgeld: 613,
+          maintenanceReserve: 24.85,
+          totalWeg: 637.85
+        }
+      });
+      const siemensHausgeldDetails = JSON.stringify({
+        WE5: { hausgeld: 215, maintenanceReserve: 18.97, total: 233.97 },
+        WE6: { hausgeld: 613, maintenanceReserve: 24.85, total: 637.85 }
+      });
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "unitDetails" = ?,
+            "hausgeldDetails" = ?,
+            "hausgeld" = 828,
+            "maintenanceReserve" = 43.82
+        WHERE (LOWER("address") LIKE '%siemen%' OR LOWER("name") LIKE '%siemen%')
+          AND (LOWER(COALESCE("floor", '')) LIKE '%2%' OR LOWER("name") LIKE '%2.og%' OR LOWER("name") LIKE '%2og%');
+      `, siemensUnitDetails, siemensHausgeldDetails);
+      await prisma.$executeRawUnsafe(`
+        INSERT OR IGNORE INTO "app_settings" ("key", "value", "updatedAt")
+        VALUES ('unit_details_seeded_v1', '1', CURRENT_TIMESTAMP);
       `);
     }
 

@@ -7,7 +7,7 @@ import {
   Phone, Mail, Calendar, CreditCard, Edit, Trash2, X, TrendingUp,
   AlertCircle, ShieldCheck, Clock, Calculator, Upload, Check,
   UserPlus, UserMinus, AlertTriangle, Home, Coins, Percent, ArrowUpRight, ArrowRight, Info,
-  Hammer, ShieldAlert, ChevronDown, ChevronUp, Receipt, History, Archive
+  Hammer, ShieldAlert, ChevronDown, ChevronUp, Receipt, History, Archive, Layers
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,27 @@ import { toast } from "@/hooks/use-toast";
 import { RentAdjustmentDialog } from "@/components/RentAdjustmentDialog";
 import { PropertyInvestmentsDialog, PropertyInvestment } from "@/components/PropertyInvestmentsDialog";
 import { parseUnitTokens } from "@/lib/property-matching";
+
+export interface SubUnitDetail {
+  key: string;
+  unitNumber?: string;
+  name?: string;
+  label?: string;
+  floor?: string;
+  sqm?: number;
+  rentSqm?: number;
+  purchasePrice?: number;
+  purchasedAt?: string;
+  possessionAt?: string;
+  coldRent?: number;
+  heating?: number;
+  operatingCosts?: number;
+  utilities?: number;
+  warmRent?: number;
+  hausgeld?: number;
+  maintenanceReserve?: number;
+  totalWeg?: number;
+}
 
 interface Tenant {
   id: string;
@@ -83,6 +104,7 @@ interface Property {
   buildingSharePercent?: number | null;
   hausgeld?: number | null;
   hausgeldDetails?: string | null;
+  unitDetails?: string | null;
   nonRecoverableCosts?: number | null;
   maintenanceReserve?: number | null;
   tenant: Tenant | null;
@@ -465,6 +487,14 @@ function EditPropertyDialog({
   }
   const [unitDetails, setUnitDetails] = useState<Record<string, string>>(initialUnitDetails);
 
+  let initialSubUnits: Record<string, SubUnitDetail> = {};
+  if (property.unitDetails) {
+    try {
+      initialSubUnits = typeof property.unitDetails === "string" ? JSON.parse(property.unitDetails) : property.unitDetails;
+    } catch {}
+  }
+  const [subUnits, setSubUnits] = useState<Record<string, SubUnitDetail>>(initialSubUnits);
+
   const [form, setForm] = useState({
     name: property.name,
     address: property.address,
@@ -496,18 +526,76 @@ function EditPropertyDialog({
     }
   };
 
+  const handleSubUnitFieldChange = (key: string, field: keyof SubUnitDetail, rawVal: string) => {
+    setSubUnits((prev) => {
+      const cur = prev[key] || { key };
+      let parsedVal: any = rawVal;
+      const numFields: (keyof SubUnitDetail)[] = [
+        'sqm', 'rentSqm', 'purchasePrice', 'coldRent', 'heating',
+        'operatingCosts', 'utilities', 'warmRent', 'hausgeld',
+        'maintenanceReserve', 'totalWeg'
+      ];
+      if (numFields.includes(field)) {
+        parsedVal = parseGermanNumber(rawVal);
+      }
+      const updatedUnit: SubUnitDetail = { ...cur, [field]: parsedVal };
+
+      // Automatische Zwischensummen je Einheit
+      if (['coldRent', 'heating', 'operatingCosts', 'utilities'].includes(field as string)) {
+        const cold = updatedUnit.coldRent || 0;
+        const heat = updatedUnit.heating || 0;
+        const bk = updatedUnit.operatingCosts || 0;
+        const ut = (heat + bk) > 0 ? (heat + bk) : (updatedUnit.utilities || 0);
+        updatedUnit.utilities = ut;
+        updatedUnit.warmRent = cold + ut;
+      }
+      if (field === 'hausgeld' || field === 'maintenanceReserve') {
+        const hg = updatedUnit.hausgeld || 0;
+        const mr = updatedUnit.maintenanceReserve || 0;
+        updatedUnit.totalWeg = Math.round((hg + mr) * 100) / 100;
+      }
+
+      const nextSubUnits = { ...prev, [key]: updatedUnit };
+
+      // Gesamtsummen für das Hauptobjekt automatisch synchronisieren
+      const allUnits = Object.values(nextSubUnits);
+      const sumPurchase = allUnits.reduce((s, u) => s + (u.purchasePrice || 0), 0);
+      const sumSqm = allUnits.reduce((s, u) => s + (u.sqm || 0), 0);
+      const sumHg = allUnits.reduce((s, u) => s + (u.hausgeld || 0), 0);
+      const sumMr = allUnits.reduce((s, u) => s + (u.maintenanceReserve || 0), 0);
+
+      setForm((f) => ({
+        ...f,
+        ...(sumPurchase > 0 ? { purchasePrice: formatGermanInput(sumPurchase) } : {}),
+        ...(sumSqm > 0 ? { sqm: sumSqm.toString() } : {}),
+        ...(sumHg > 0 ? { hausgeld: formatGermanInput(sumHg) } : {}),
+        ...(sumMr > 0 ? { maintenanceReserve: formatGermanInput(sumMr) } : {}),
+      }));
+
+      return nextSubUnits;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
 
-    let hausgeldDetailsPayload: string | null = null;
+    let hausgeldDetailsPayload: string | null = property.hausgeldDetails || null;
     const tokens = parseUnitTokens(form.unitNumber);
     if (tokens.length > 1) {
-      const detailsObj: Record<string, { hausgeld: number }> = {};
-      for (const token of tokens) {
-        const val = parseGermanNumber(unitDetails[token.raw] || "");
-        if (val > 0) {
-          detailsObj[token.raw] = { hausgeld: val };
+      const detailsObj: Record<string, { hausgeld?: number; maintenanceReserve?: number; total?: number }> = {};
+      if (Object.keys(subUnits).length > 0) {
+        for (const [k, u] of Object.entries(subUnits)) {
+          detailsObj[k] = {
+            hausgeld: u.hausgeld,
+            maintenanceReserve: u.maintenanceReserve,
+            total: (u.hausgeld || 0) + (u.maintenanceReserve || 0),
+          };
+        }
+      } else {
+        for (const token of tokens) {
+          const val = parseGermanNumber(unitDetails[token.raw] || "");
+          if (val > 0) detailsObj[token.raw] = { hausgeld: val };
         }
       }
       if (Object.keys(detailsObj).length > 0) {
@@ -527,6 +615,7 @@ function EditPropertyDialog({
       buildingSharePercent: form.buildingSharePercent ? parseGermanNumber(form.buildingSharePercent) : 80,
       hausgeld: form.hausgeld ? parseGermanNumber(form.hausgeld) : null,
       hausgeldDetails: hausgeldDetailsPayload,
+      unitDetails: Object.keys(subUnits).length > 0 ? JSON.stringify(subUnits) : (property.unitDetails || null),
       nonRecoverableCosts: form.nonRecoverableCosts ? parseGermanNumber(form.nonRecoverableCosts) : null,
       maintenanceReserve: form.maintenanceReserve ? parseGermanNumber(form.maintenanceReserve) : null,
     };
@@ -767,8 +856,127 @@ function EditPropertyDialog({
               </div>
             </div>
 
-            {/* Mehrere Wohneinheiten (z.B. WE 5 und WE 6)? Aufteilung ermöglichen */}
-            {parseUnitTokens(form.unitNumber).length > 1 && (
+            {/* Mehrere Wohneinheiten (z.B. WE 5 und WE 6)? Untergliederung für Verbundwohnung */}
+            {Object.keys(subUnits).length > 0 ? (
+              <div className="p-3 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    Vertragliche Untergliederung ({Object.keys(subUnits).length} Einheiten)
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                    Verbund-Objekt
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Separate Kauf- und Mietverträge je Wohneinheit. Änderungen synchronisieren automatisch Kaufpreis, Fläche und Hausgeld des Gesamtobjekts.
+                </p>
+
+                <div className="space-y-3">
+                  {Object.entries(subUnits).map(([key, u]) => (
+                    <div key={key} className="rounded-lg border border-border/70 bg-background/90 p-3 space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-border/40 pb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 font-bold text-xs">
+                            {u.unitNumber || key}
+                          </span>
+                          <span className="text-xs font-semibold text-foreground">{u.name || key}</span>
+                        </div>
+                        <span className="text-xs font-mono text-muted-foreground">{u.sqm || 0} m²</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Wohnfläche (m²)</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={u.sqm != null ? formatGermanInput(u.sqm) : ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "sqm", e.target.value)}
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Kaufpreis (€ Notar)</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={u.purchasePrice != null ? formatGermanInput(u.purchasePrice) : ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "purchasePrice", e.target.value)}
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Notartermin (Kauf)</Label>
+                          <Input
+                            type="date"
+                            value={u.purchasedAt || ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "purchasedAt", e.target.value)}
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Kaltmiete (€/Mo)</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={u.coldRent != null ? formatGermanInput(u.coldRent) : ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "coldRent", e.target.value)}
+                            className="h-7 text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Heizung (€/Mo)</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={u.heating != null ? formatGermanInput(u.heating) : ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "heating", e.target.value)}
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Betriebskosten (€/Mo)</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={u.operatingCosts != null ? formatGermanInput(u.operatingCosts) : ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "operatingCosts", e.target.value)}
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Hausgeld operativ (€/Mo)</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={u.hausgeld != null ? formatGermanInput(u.hausgeld) : ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "hausgeld", e.target.value)}
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Erhaltungsrücklage (€/Mo)</Label>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={u.maintenanceReserve != null ? formatGermanInput(u.maintenanceReserve) : ""}
+                            onChange={(e) => handleSubUnitFieldChange(key, "maintenanceReserve", e.target.value)}
+                            className="h-7 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] text-muted-foreground">Warmmiete gesamt (€)</Label>
+                          <div className="h-7 px-2 rounded-md bg-muted flex items-center font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(u.warmRent || ((u.coldRent || 0) + (u.utilities || ((u.heating || 0) + (u.operatingCosts || 0)))))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : parseUnitTokens(form.unitNumber).length > 1 ? (
               <div className="p-2.5 rounded-lg border border-border/80 bg-muted/40 space-y-2">
                 <div className="text-[11px] font-semibold flex items-center justify-between">
                   <span>Aufteilung nach Wohneinheiten ({parseUnitTokens(form.unitNumber).map((u) => u.raw).join(", ")}):</span>
@@ -790,7 +998,7 @@ function EditPropertyDialog({
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
 
             {/* Parameter für Netto-Cashflow */}
             <div className="pt-2">
@@ -2107,6 +2315,71 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
             </div>
           )}
         </div>
+
+        {/* Verbund-Aufteilung nach Wohneinheiten (z.B. WE 5 & WE 6) */}
+        {property.unitDetails && (() => {
+          try {
+            const details: Record<string, SubUnitDetail> = typeof property.unitDetails === "string" ? JSON.parse(property.unitDetails) : property.unitDetails;
+            const units = Object.values(details);
+            if (units.length > 1) {
+              return (
+                <div className="rounded-xl border border-indigo-200/70 dark:border-indigo-800/70 bg-indigo-50/40 dark:bg-indigo-950/20 p-2.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                      Verbund-Aufteilung ({units.length} Einheiten)
+                    </span>
+                    <Badge variant="outline" className="text-[10px] bg-indigo-100/60 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700">
+                      Kombinierte Nutzung
+                    </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {units.map((u) => (
+                      <div key={u.key} className="rounded-lg bg-background/80 p-2.5 border border-border/60 space-y-1.5">
+                        <div className="flex items-center justify-between font-semibold text-xs text-foreground border-b border-border/40 pb-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 text-[10px] font-bold">
+                              {u.unitNumber || u.key}
+                            </span>
+                            <span>{u.name || u.label || u.key}</span>
+                          </span>
+                          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{u.sqm} m²</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-0.5">
+                          <div className="space-y-0.5">
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Kauf & Notar</div>
+                            <div className="font-mono text-foreground font-medium">{formatCurrency(u.purchasePrice || 0)}</div>
+                            <div className="text-[10px] text-muted-foreground">Notar: {u.purchasedAt ? formatDate(u.purchasedAt) : "–"}</div>
+                          </div>
+                          <div className="space-y-0.5">
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Mietvertrag</div>
+                            <div className="font-mono text-foreground font-medium">Kalt: {formatCurrency(u.coldRent || 0)}</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              NK: {formatCurrency(u.utilities || 0)} {u.heating ? `(Hzg ${formatCurrency(u.heating)} + BK ${formatCurrency(u.operatingCosts || 0)})` : ""}
+                            </div>
+                            <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                              Warm: {formatCurrency(u.warmRent || ((u.coldRent || 0) + (u.utilities || 0)))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-1 border-t border-border/40 flex items-center justify-between text-[11px]">
+                          <span className="text-muted-foreground">WEG-Hausgeld & Rücklage:</span>
+                          <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {formatCurrency(u.totalWeg || ((u.hausgeld || 0) + (u.maintenanceReserve || 0)))}/Mo
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+          } catch {}
+          return null;
+        })()}
 
         {/* Mieterbereich: Entweder Vermietet ODER Leerstand */}
         {property.tenant ? (

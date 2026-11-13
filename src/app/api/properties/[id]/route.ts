@@ -83,6 +83,7 @@ export async function PUT(
         buildingSharePercent: body.buildingSharePercent !== undefined ? (body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80) : undefined,
         hausgeld: body.hausgeld !== undefined ? parseOptFloat(body.hausgeld) : undefined,
         hausgeldDetails: body.hausgeldDetails !== undefined ? (typeof body.hausgeldDetails === "string" ? body.hausgeldDetails : JSON.stringify(body.hausgeldDetails)) : undefined,
+        unitDetails: body.unitDetails !== undefined ? (typeof body.unitDetails === "string" ? body.unitDetails : JSON.stringify(body.unitDetails)) : undefined,
         nonRecoverableCosts: body.nonRecoverableCosts !== undefined ? parseOptFloat(body.nonRecoverableCosts) : undefined,
         maintenanceReserve: body.maintenanceReserve !== undefined ? parseOptFloat(body.maintenanceReserve) : undefined,
       },

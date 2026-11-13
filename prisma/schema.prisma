@@ -37,6 +37,7 @@ model Property {
   hausgeld            Float?   // Monatliches Hausgeld an WEG in € (operativ / Wirtschaftsplan)
   maintenanceReserve  Float?   // Monatliche Erhaltungsrücklage / Instandhaltungsrücklage an WEG in €
   hausgeldDetails     String?  // JSON für Einheiten-Aufteilung bei Mehrfach-WEs (z.B. {"WE5": 250, "WE6": 340})
+  unitDetails         String?  // JSON für Verbundwohnungen: Details der Untereinheiten (Kaufpreis, Notardatum, m², Kaltmiete, NK, Hausgeld)
   nonRecoverableCosts Float?   // Nicht-umlagefähige Betriebskosten monatlich in € (Verwaltung, SEV)
   
   createdAt   DateTime @default(now())
