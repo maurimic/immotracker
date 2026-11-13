@@ -408,19 +408,25 @@ export function ruleBasedMatch(
     };
   }
 
-  // 7. Grundsteuer / Grundbesitzabgaben
-  if (rowRef.includes("grundsteuer") || rowRef.includes("grundbesitzabgab")) {
+  // 7. Grundsteuer / Grundbesitzabgaben / Kommunalabgaben (Stadtkasse / Stadt / Finanzamt)
+  const isGrundsteuer =
+    rowRef.includes("grundsteuer") ||
+    rowRef.includes("grundbesitzabgab") ||
+    ((rowRef.includes("az finanzamt") || rowRef.includes("finanzamt") || rowRef.includes("finanzkasse")) &&
+      (rowRef.includes("kz ") || rowRef.includes("kassenzeichen") || rowName.includes("stadt") || rowName.includes("gemeinde")));
+
+  if (isGrundsteuer) {
     const propCandidate = findBestMatchingProperty(combinedFullText, allProperties);
     const matchedId =
       propCandidate?.property && (propCandidate.addressMatched || propCandidate.unitMatched)
         ? propCandidate.property.id
-        : null;
+        : allProperties.find((p) => p.name.toLowerCase().includes("schwerte") && (rowName.includes("schwerte") || rowRef.includes("schwerte")))?.id || null;
     return {
       tenantId: null,
       propertyId: matchedId,
       loanId: null,
       method: matchedId ? "NAME" : "UNMATCHED",
-      confidence: 0.95,
+      confidence: matchedId ? 0.95 : 0.75,
       category: "OTHER",
     };
   }
@@ -429,7 +435,7 @@ export function ruleBasedMatch(
   const utilityKeywords = [
     "stadtwerk", "versorger", "stromanbieter", "wasserwerk", "gaswerk",
     "heizkost", "hausverwaltung", "versicherung", "allianz", "signal",
-    "engie", "eon", "vattenfall", "stadtgas", "fernwärme", "schwerte",
+    "engie", "eon", "vattenfall", "stadtgas", "fernwärme",
   ];
   if (utilityKeywords.some((kw) => rowName.includes(kw) || rowRef.includes(kw))) {
     const propCandidate = findBestMatchingProperty(combinedFullText, allProperties);
@@ -443,7 +449,7 @@ export function ruleBasedMatch(
       loanId: null,
       method: matchedId ? "NAME" : "UNMATCHED",
       confidence: matchedId ? 0.85 : 0.75,
-      category: "UTILITY_IN",
+      category: row.amount < 0 ? "OTHER" : "UTILITY_IN",
     };
   }
 

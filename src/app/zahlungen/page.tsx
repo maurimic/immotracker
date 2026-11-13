@@ -3920,7 +3920,7 @@ function ZahlungenContent() {
                                   )
                                 ) : isUtility ? (
                                   <span className="text-cyan-700 dark:text-cyan-300 font-semibold text-[11px]" title="Zahlung für Nebenkostenabrechnung (keine Mietüberzahlung)">
-                                    +{formatCurrency(payment.amount)} (NK)
+                                    {payment.amount > 0 ? "+" : ""}{formatCurrency(payment.amount)} (NK)
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground">–</span>
