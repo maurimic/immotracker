@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import Link from "next/link";
 import {
   Building2, Plus, Users, Euro, FileText, ChevronRight,
@@ -43,11 +43,20 @@ export interface SubUnitDetail {
   purchasePrice?: number;
   purchasedAt?: string;
   possessionAt?: string;
+  // Kaufnebenkosten je Einheit
+  ancillaryCosts?: number;
+  propertyTransferTax?: number;
+  notaryCosts?: number;
+  landRegisterCosts?: number;
+  brokerCosts?: number;
+  otherAncillaryCosts?: number;
+  // Miete
   coldRent?: number;
   heating?: number;
   operatingCosts?: number;
   utilities?: number;
   warmRent?: number;
+  // WEG
   hausgeld?: number;
   maintenanceReserve?: number;
   totalWeg?: number;
@@ -494,6 +503,7 @@ function EditPropertyDialog({
     } catch {}
   }
   const [subUnits, setSubUnits] = useState<Record<string, SubUnitDetail>>(initialSubUnits);
+  const [expandedSubUnitCosts, setExpandedSubUnitCosts] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     name: property.name,
@@ -533,7 +543,9 @@ function EditPropertyDialog({
       const numFields: (keyof SubUnitDetail)[] = [
         'sqm', 'rentSqm', 'purchasePrice', 'coldRent', 'heating',
         'operatingCosts', 'utilities', 'warmRent', 'hausgeld',
-        'maintenanceReserve', 'totalWeg'
+        'maintenanceReserve', 'totalWeg',
+        'ancillaryCosts', 'propertyTransferTax', 'notaryCosts',
+        'landRegisterCosts', 'brokerCosts', 'otherAncillaryCosts'
       ];
       if (numFields.includes(field)) {
         parsedVal = parseGermanNumber(rawVal);
@@ -554,6 +566,17 @@ function EditPropertyDialog({
         const mr = updatedUnit.maintenanceReserve || 0;
         updatedUnit.totalWeg = Math.round((hg + mr) * 100) / 100;
       }
+      if (['propertyTransferTax', 'notaryCosts', 'landRegisterCosts', 'brokerCosts', 'otherAncillaryCosts'].includes(field as string)) {
+        const pTax = updatedUnit.propertyTransferTax || 0;
+        const not = updatedUnit.notaryCosts || 0;
+        const land = updatedUnit.landRegisterCosts || 0;
+        const brok = updatedUnit.brokerCosts || 0;
+        const oth = updatedUnit.otherAncillaryCosts || 0;
+        const detailed = pTax + not + land + brok + oth;
+        if (detailed > 0 || (field === 'propertyTransferTax' && pTax === 0)) {
+          updatedUnit.ancillaryCosts = Math.round(detailed * 100) / 100;
+        }
+      }
 
       const nextSubUnits = { ...prev, [key]: updatedUnit };
 
@@ -563,6 +586,12 @@ function EditPropertyDialog({
       const sumSqm = allUnits.reduce((s, u) => s + (u.sqm || 0), 0);
       const sumHg = allUnits.reduce((s, u) => s + (u.hausgeld || 0), 0);
       const sumMr = allUnits.reduce((s, u) => s + (u.maintenanceReserve || 0), 0);
+      const sumAncillary = allUnits.reduce((s, u) => s + (u.ancillaryCosts || 0), 0);
+      const sumPTax = allUnits.reduce((s, u) => s + (u.propertyTransferTax || 0), 0);
+      const sumNotary = allUnits.reduce((s, u) => s + (u.notaryCosts || 0), 0);
+      const sumLandReg = allUnits.reduce((s, u) => s + (u.landRegisterCosts || 0), 0);
+      const sumBroker = allUnits.reduce((s, u) => s + (u.brokerCosts || 0), 0);
+      const sumOther = allUnits.reduce((s, u) => s + (u.otherAncillaryCosts || 0), 0);
 
       setForm((f) => ({
         ...f,
@@ -570,10 +599,31 @@ function EditPropertyDialog({
         ...(sumSqm > 0 ? { sqm: sumSqm.toString() } : {}),
         ...(sumHg > 0 ? { hausgeld: formatGermanInput(sumHg) } : {}),
         ...(sumMr > 0 ? { maintenanceReserve: formatGermanInput(sumMr) } : {}),
+        ...(sumAncillary > 0 ? { ancillaryCosts: formatGermanInput(sumAncillary) } : {}),
+        ...(sumPTax > 0 ? { propertyTransferTax: formatGermanInput(sumPTax) } : {}),
+        ...(sumNotary > 0 ? { notaryCosts: formatGermanInput(sumNotary) } : {}),
+        ...(sumLandReg > 0 ? { landRegisterCosts: formatGermanInput(sumLandReg) } : {}),
+        ...(sumBroker > 0 ? { brokerCosts: formatGermanInput(sumBroker) } : {}),
+        ...(sumOther > 0 ? { otherAncillaryCosts: formatGermanInput(sumOther) } : {}),
       }));
 
       return nextSubUnits;
     });
+  };
+
+  const applyPercentToSubUnitField = (key: string, field: keyof SubUnitDetail, pct: number) => {
+    const cur = subUnits[key];
+    const p = cur?.purchasePrice || 0;
+    if (p <= 0) {
+      toast({
+        title: "Kaufpreis benötigt",
+        description: "Bitte zuerst einen Kaufpreis für diese Einheit eingeben.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const val = Math.round(p * (pct / 100) * 100) / 100;
+    handleSubUnitFieldChange(key, field, formatGermanInput(val));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -971,6 +1021,161 @@ function EditPropertyDialog({
                             {formatCurrency(u.warmRent || ((u.coldRent || 0) + (u.utilities || ((u.heating || 0) + (u.operatingCosts || 0)))))}
                           </div>
                         </div>
+                      </div>
+
+                      {/* Kaufnebenkosten dieser Einheit */}
+                      <div className="pt-2 border-t border-border/50 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <Receipt className="h-3.5 w-3.5 text-primary" />
+                            <span className="text-[11px] font-semibold text-foreground">Kaufnebenkosten dieser Einheit</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedSubUnitCosts((prev) => ({ ...prev, [key]: !prev[key] }))}
+                            className="text-[10px] text-primary hover:underline flex items-center gap-0.5 bg-primary/10 hover:bg-primary/20 px-1.5 py-0.5 rounded transition-colors"
+                          >
+                            {expandedSubUnitCosts[key] ? (
+                              <>
+                                <ChevronUp className="h-3 w-3" /> Details schließen
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3 w-3" /> Aufschlüsselung {u.ancillaryCosts ? `(${formatCurrency(u.ancillaryCosts)})` : "öffnen"}
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 items-center">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">Kaufnebenkosten gesamt (€)</Label>
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="z. B. 4.500,00"
+                              value={u.ancillaryCosts != null && u.ancillaryCosts > 0 ? formatGermanInput(u.ancillaryCosts) : ""}
+                              onChange={(e) => handleSubUnitFieldChange(key, "ancillaryCosts", e.target.value)}
+                              className="h-7 text-xs font-mono"
+                            />
+                          </div>
+                          <div className="text-[10px] text-muted-foreground leading-tight pt-3">
+                            {(u.purchasePrice || 0) > 0 && (u.ancillaryCosts || 0) > 0 ? (
+                              <span>
+                                = <strong className="text-foreground">{formatGermanPercent(((u.ancillaryCosts || 0) / (u.purchasePrice || 1)) * 100, 1)}</strong> des Kaufpreises
+                                <span className="block font-medium text-amber-600 dark:text-amber-400">
+                                  Investition: {formatCurrency((u.purchasePrice || 0) + (u.ancillaryCosts || 0))}
+                                </span>
+                              </span>
+                            ) : (
+                              <span>GrESt, Notar, Grundbuch etc.</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {expandedSubUnitCosts[key] && (
+                          <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/60 space-y-2 text-xs">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {/* 1. Grunderwerbsteuer */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-[10px] text-muted-foreground">1. Grunderwerbsteuer (€)</Label>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-5 px-1 text-[9px] bg-background hover:bg-muted"
+                                    onClick={() => applyPercentToSubUnitField(key, "propertyTransferTax", 6.5)}
+                                  >
+                                    6,5% (NRW)
+                                  </Button>
+                                </div>
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="z. B. 3.412,50"
+                                  value={u.propertyTransferTax != null && u.propertyTransferTax > 0 ? formatGermanInput(u.propertyTransferTax) : ""}
+                                  onChange={(e) => handleSubUnitFieldChange(key, "propertyTransferTax", e.target.value)}
+                                  className="h-7 text-xs font-mono"
+                                />
+                              </div>
+
+                              {/* 2. Notarkosten */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-[10px] text-muted-foreground">2. Notarkosten (€)</Label>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-5 px-1 text-[9px] bg-background hover:bg-muted"
+                                    onClick={() => applyPercentToSubUnitField(key, "notaryCosts", 1.5)}
+                                  >
+                                    ~1,5% Standard
+                                  </Button>
+                                </div>
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="z. B. 787,50"
+                                  value={u.notaryCosts != null && u.notaryCosts > 0 ? formatGermanInput(u.notaryCosts) : ""}
+                                  onChange={(e) => handleSubUnitFieldChange(key, "notaryCosts", e.target.value)}
+                                  className="h-7 text-xs font-mono"
+                                />
+                              </div>
+
+                              {/* 3. Grundbuchamt */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-[10px] text-muted-foreground">3. Grundbuchamt (€)</Label>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-5 px-1 text-[9px] bg-background hover:bg-muted"
+                                    onClick={() => applyPercentToSubUnitField(key, "landRegisterCosts", 0.5)}
+                                  >
+                                    ~0,5% Standard
+                                  </Button>
+                                </div>
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="z. B. 262,50"
+                                  value={u.landRegisterCosts != null && u.landRegisterCosts > 0 ? formatGermanInput(u.landRegisterCosts) : ""}
+                                  onChange={(e) => handleSubUnitFieldChange(key, "landRegisterCosts", e.target.value)}
+                                  className="h-7 text-xs font-mono"
+                                />
+                              </div>
+
+                              {/* 4. Maklerprovision */}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] text-muted-foreground">4. Maklerprovision (€)</Label>
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="z. B. 0,00"
+                                  value={u.brokerCosts != null && u.brokerCosts > 0 ? formatGermanInput(u.brokerCosts) : ""}
+                                  onChange={(e) => handleSubUnitFieldChange(key, "brokerCosts", e.target.value)}
+                                  className="h-7 text-xs font-mono"
+                                />
+                              </div>
+
+                              {/* 5. Sonstige Nebenkosten */}
+                              <div className="space-y-1 sm:col-span-2">
+                                <Label className="text-[10px] text-muted-foreground">5. Sonstige Nebenkosten (€ Gutachten, etc.)</Label>
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder="z. B. 0,00"
+                                  value={u.otherAncillaryCosts != null && u.otherAncillaryCosts > 0 ? formatGermanInput(u.otherAncillaryCosts) : ""}
+                                  onChange={(e) => handleSubUnitFieldChange(key, "otherAncillaryCosts", e.target.value)}
+                                  className="h-7 text-xs font-mono"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2349,9 +2554,26 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
 
                         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-0.5">
                           <div className="space-y-0.5">
-                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Kauf & Notar</div>
-                            <div className="font-mono text-foreground font-medium">{formatCurrency(u.purchasePrice || 0)}</div>
-                            <div className="text-[10px] text-muted-foreground">Notar: {u.purchasedAt ? formatDate(u.purchasedAt) : "–"}</div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Kauf & Erwerb</div>
+                            <div className="font-mono text-foreground font-medium">Kaufpreis: {formatCurrency(u.purchasePrice || 0)}</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              + Nebenkosten: <span className="font-mono font-medium text-foreground">{u.ancillaryCosts ? formatCurrency(u.ancillaryCosts) : "–"}</span>
+                            </div>
+                            {u.ancillaryCosts ? (
+                              <div className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-semibold">
+                                Investition: {formatCurrency((u.purchasePrice || 0) + (u.ancillaryCosts || 0))}
+                              </div>
+                            ) : null}
+                            {(Boolean(u.propertyTransferTax || u.notaryCosts || u.landRegisterCosts || u.brokerCosts || u.otherAncillaryCosts)) && (
+                              <div className="pl-1.5 border-l border-primary/40 text-[9px] text-muted-foreground font-mono space-y-0.5 pt-0.5">
+                                {u.propertyTransferTax ? <div>• GrESt: {formatCurrency(u.propertyTransferTax)}</div> : null}
+                                {u.notaryCosts ? <div>• Notar: {formatCurrency(u.notaryCosts)}</div> : null}
+                                {u.landRegisterCosts ? <div>• Grundbuch: {formatCurrency(u.landRegisterCosts)}</div> : null}
+                                {u.brokerCosts ? <div>• Makler: {formatCurrency(u.brokerCosts)}</div> : null}
+                                {u.otherAncillaryCosts ? <div>• Sonst.: {formatCurrency(u.otherAncillaryCosts)}</div> : null}
+                              </div>
+                            )}
+                            <div className="text-[10px] text-muted-foreground pt-0.5">Notar: {u.purchasedAt ? formatDate(u.purchasedAt) : "–"}</div>
                           </div>
                           <div className="space-y-0.5">
                             <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Mietvertrag</div>
@@ -3496,49 +3718,118 @@ function PortfolioKaufwertInfoDialog({
                     const cold = p.tenant?.coldRent || 0;
                     const yld = price > 0 && cold > 0 ? formatGermanPercent((cold * 12 / price) * 100, 2) : null;
 
+                    let subUnitsList: any[] = [];
+                    if (p.unitDetails) {
+                      try {
+                        const parsed = typeof p.unitDetails === "string" ? JSON.parse(p.unitDetails) : p.unitDetails;
+                        const values = Object.values(parsed) as any[];
+                        if (values.length > 1) subUnitsList = values;
+                      } catch {}
+                    }
+
                     return (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-medium text-xs">
-                          <div>{p.name}</div>
-                          <div className="text-[10px] text-muted-foreground">{p.address}</div>
-                        </TableCell>
-                        <TableCell className="text-xs text-right">{p.sqm} m²</TableCell>
-                        <TableCell className="text-xs text-right font-medium">
-                          {price > 0 ? (
-                            formatCurrency(price)
-                          ) : (
-                            <span className="text-muted-foreground italic text-[11px]">Nicht hinterlegt</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-right">
-                          {anc > 0 ? (
-                            <div>
-                              <span className="font-mono font-medium">{formatCurrency(anc)}</span>
-                              {(p.propertyTransferTax || p.notaryCosts || p.landRegisterCosts || p.brokerCosts || p.otherAncillaryCosts) ? (
-                                <div className="text-[9px] text-muted-foreground space-y-0.5 mt-0.5 font-mono">
-                                  {p.propertyTransferTax ? <div>GrESt: {formatCurrency(p.propertyTransferTax)}</div> : null}
-                                  {p.notaryCosts ? <div>Notar: {formatCurrency(p.notaryCosts)}</div> : null}
-                                  {p.landRegisterCosts ? <div>Grundbuch: {formatCurrency(p.landRegisterCosts)}</div> : null}
-                                  {p.brokerCosts ? <div>Makler: {formatCurrency(p.brokerCosts)}</div> : null}
-                                  {p.otherAncillaryCosts ? <div>Sonst.: {formatCurrency(p.otherAncillaryCosts)}</div> : null}
-                                </div>
-                              ) : null}
+                      <Fragment key={p.id}>
+                        <TableRow className={subUnitsList.length > 1 ? "bg-muted/30" : ""}>
+                          <TableCell className="font-medium text-xs">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{p.name}</span>
+                              {subUnitsList.length > 1 && (
+                                <Badge variant="outline" className="text-[9px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-300">
+                                  Verbund ({subUnitsList.length})
+                                </Badge>
+                              )}
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground">–</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-right">
-                          {cold > 0 ? formatCurrency(cold) : <span className="text-muted-foreground italic">Leerstand</span>}
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-semibold">
-                          {yld ? (
-                            <span className="text-green-600 dark:text-green-400">{yld} p.a.</span>
-                          ) : (
-                            <span className="text-muted-foreground">–</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
+                            <div className="text-[10px] text-muted-foreground">{p.address}</div>
+                          </TableCell>
+                          <TableCell className="text-xs text-right">{p.sqm} m²</TableCell>
+                          <TableCell className="text-xs text-right font-medium">
+                            {price > 0 ? (
+                              formatCurrency(price)
+                            ) : (
+                              <span className="text-muted-foreground italic text-[11px]">Nicht hinterlegt</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-right">
+                            {anc > 0 ? (
+                              <div>
+                                <span className="font-mono font-medium">{formatCurrency(anc)}</span>
+                                {(p.propertyTransferTax || p.notaryCosts || p.landRegisterCosts || p.brokerCosts || p.otherAncillaryCosts) ? (
+                                  <div className="text-[9px] text-muted-foreground space-y-0.5 mt-0.5 font-mono">
+                                    {p.propertyTransferTax ? <div>GrESt: {formatCurrency(p.propertyTransferTax)}</div> : null}
+                                    {p.notaryCosts ? <div>Notar: {formatCurrency(p.notaryCosts)}</div> : null}
+                                    {p.landRegisterCosts ? <div>Grundbuch: {formatCurrency(p.landRegisterCosts)}</div> : null}
+                                    {p.brokerCosts ? <div>Makler: {formatCurrency(p.brokerCosts)}</div> : null}
+                                    {p.otherAncillaryCosts ? <div>Sonst.: {formatCurrency(p.otherAncillaryCosts)}</div> : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">–</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-right">
+                            {cold > 0 ? formatCurrency(cold) : <span className="text-muted-foreground italic">Leerstand</span>}
+                          </TableCell>
+                          <TableCell className="text-xs text-right font-semibold">
+                            {yld ? (
+                              <span className="text-green-600 dark:text-green-400">{yld} p.a.</span>
+                            ) : (
+                              <span className="text-muted-foreground">–</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        {subUnitsList.length > 1 && subUnitsList.map((u) => {
+                          const uPrice = u.purchasePrice || 0;
+                          const uAnc = u.ancillaryCosts || 0;
+                          const uCold = u.coldRent || 0;
+                          const uYld = uPrice > 0 && uCold > 0 ? formatGermanPercent((uCold * 12 / uPrice) * 100, 2) : null;
+                          return (
+                            <TableRow key={`${p.id}-${u.key}`} className="bg-indigo-50/20 dark:bg-indigo-950/15 border-l-2 border-l-indigo-500 text-xs">
+                              <TableCell className="font-medium pl-6 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-indigo-600 dark:text-indigo-400 font-bold text-[10px] px-1 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40">
+                                    {u.unitNumber || u.key}
+                                  </span>
+                                  <span>{u.name || u.key}</span>
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">{p.address}</div>
+                              </TableCell>
+                              <TableCell className="text-xs text-right font-mono">{u.sqm} m²</TableCell>
+                              <TableCell className="text-xs text-right font-mono font-medium">
+                                {uPrice > 0 ? formatCurrency(uPrice) : "–"}
+                              </TableCell>
+                              <TableCell className="text-xs text-right font-mono">
+                                {uAnc > 0 ? (
+                                  <div>
+                                    <span className="font-mono font-medium">{formatCurrency(uAnc)}</span>
+                                    {(u.propertyTransferTax || u.notaryCosts || u.landRegisterCosts || u.brokerCosts || u.otherAncillaryCosts) ? (
+                                      <div className="text-[9px] text-muted-foreground space-y-0.5 mt-0.5 font-mono">
+                                        {u.propertyTransferTax ? <div>GrESt: {formatCurrency(u.propertyTransferTax)}</div> : null}
+                                        {u.notaryCosts ? <div>Notar: {formatCurrency(u.notaryCosts)}</div> : null}
+                                        {u.landRegisterCosts ? <div>Grundbuch: {formatCurrency(u.landRegisterCosts)}</div> : null}
+                                        {u.brokerCosts ? <div>Makler: {formatCurrency(u.brokerCosts)}</div> : null}
+                                        {u.otherAncillaryCosts ? <div>Sonst.: {formatCurrency(u.otherAncillaryCosts)}</div> : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">–</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs text-right font-mono">
+                                {uCold > 0 ? formatCurrency(uCold) : "–"}
+                              </TableCell>
+                              <TableCell className="text-xs text-right font-semibold">
+                                {uYld ? (
+                                  <span className="text-green-600 dark:text-green-400">{uYld} p.a.</span>
+                                ) : (
+                                  <span className="text-muted-foreground">–</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </Fragment>
                     );
                   })}
                 </TableBody>

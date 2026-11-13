@@ -345,6 +345,12 @@ export default function SteuernPage() {
         netIncome: number;
         purchasePrice?: number;
         purchasedAt?: string;
+        ancillaryCosts?: number;
+        propertyTransferTax?: number;
+        notaryCosts?: number;
+        landRegisterCosts?: number;
+        brokerCosts?: number;
+        otherAncillaryCosts?: number;
       }> | undefined = undefined;
 
       if (prop.unitDetails) {
@@ -360,11 +366,12 @@ export default function SteuernPage() {
               const uUtils = (u.utilities || 0) * 12;
               const uRev = uRent + uUtils;
 
+              const uBasePrice = (u.purchasePrice || 0) + (u.ancillaryCosts || 0);
               const priceRatio = totalSubPrice > 0 ? (u.purchasePrice || 0) / totalSubPrice : ((u.sqm || 0) / totalSubSqm);
               const uInterest = pInterest * priceRatio;
               const uMaint = pMaint * priceRatio;
-              const uAfa = (u.purchasePrice || 0) > 0
-                ? (u.purchasePrice || 0) * (buildingSharePercent / 100) * (afaRatePercent / 100)
+              const uAfa = uBasePrice > 0
+                ? uBasePrice * (buildingSharePercent / 100) * (afaRatePercent / 100)
                 : (pAfa * priceRatio);
               const uOps = uUtils * 0.95;
               const uAdmin = pAdmin * priceRatio;
@@ -388,6 +395,12 @@ export default function SteuernPage() {
                 netIncome: uNet,
                 purchasePrice: u.purchasePrice,
                 purchasedAt: u.purchasedAt,
+                ancillaryCosts: u.ancillaryCosts,
+                propertyTransferTax: u.propertyTransferTax,
+                notaryCosts: u.notaryCosts,
+                landRegisterCosts: u.landRegisterCosts,
+                brokerCosts: u.brokerCosts,
+                otherAncillaryCosts: u.otherAncillaryCosts,
               };
             });
           }
@@ -1558,6 +1571,9 @@ Mieter: ${item.tenant}
 === ANLAGE V FÜR EINHEIT: ${(sub.name || sub.key).toUpperCase()} ===
 Wohneinheit: ${sub.unitNumber || sub.key} (${sub.sqm} m²)
 Hauptadresse: ${item.address}
+Kaufpreis (Notar): ${sub.purchasePrice ? sub.purchasePrice.toFixed(2) + " €" : "–"}
+Kaufnebenkosten: ${sub.ancillaryCosts ? sub.ancillaryCosts.toFixed(2) + " €" : "–"}
+Gesamt-Anschaffungskosten: ${((sub.purchasePrice || 0) + (sub.ancillaryCosts || 0)).toFixed(2)} €
 • Zeile 9-11 (Kaltmiete): ${sub.rent.toFixed(2)} €
 • Zeile 13 (Umlagen): ${sub.utilities.toFixed(2)} €
 → Summe Einnahmen: ${sub.totalRev.toFixed(2)} €
@@ -1842,7 +1858,7 @@ Hauptadresse: ${item.address}
                             </TableCell>
                           </TableRow>
                           {subUnitsList.length > 1 && subUnitsList.map((u) => {
-                            const uBasePrice = (u.purchasePrice || 0);
+                            const uBasePrice = (u.purchasePrice || 0) + (u.ancillaryCosts || 0);
                             const uBuildingVal = uBasePrice * (buildingSharePercent / 100);
                             const uAfaVal = uBuildingVal * (afaRatePercent / 100);
                             return (
@@ -1861,8 +1877,21 @@ Hauptadresse: ${item.address}
                                 <TableCell className="text-right font-mono text-xs">
                                   {u.purchasePrice ? formatCurrency(u.purchasePrice) : "–"}
                                 </TableCell>
-                                <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                                  –
+                                <TableCell className="text-right font-mono text-xs text-foreground">
+                                  {u.ancillaryCosts ? (
+                                    <div>
+                                      <span className="font-medium">{formatCurrency(u.ancillaryCosts)}</span>
+                                      {(u.propertyTransferTax || u.notaryCosts || u.landRegisterCosts || u.brokerCosts || u.otherAncillaryCosts) ? (
+                                        <div className="text-[9px] text-muted-foreground font-mono space-y-0.5 mt-0.5">
+                                          {u.propertyTransferTax ? <div>GrESt: {formatCurrency(u.propertyTransferTax)}</div> : null}
+                                          {u.notaryCosts ? <div>Notar: {formatCurrency(u.notaryCosts)}</div> : null}
+                                          {u.landRegisterCosts ? <div>Grundbuch: {formatCurrency(u.landRegisterCosts)}</div> : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground">–</span>
+                                  )}
                                 </TableCell>
                                 <TableCell className="text-right font-mono text-xs font-medium text-foreground">
                                   {formatCurrency(uBuildingVal)}
