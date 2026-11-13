@@ -81,8 +81,10 @@ export async function PUT(
         brokerCosts: broker,
         otherAncillaryCosts: otherAnc,
         buildingSharePercent: body.buildingSharePercent !== undefined ? (body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80) : undefined,
-        nonRecoverableCosts: body.nonRecoverableCosts !== undefined ? (body.nonRecoverableCosts !== "" && !isNaN(parseFloat(body.nonRecoverableCosts)) ? parseFloat(body.nonRecoverableCosts) : null) : undefined,
-        maintenanceReserve: body.maintenanceReserve !== undefined ? (body.maintenanceReserve !== "" && !isNaN(parseFloat(body.maintenanceReserve)) ? parseFloat(body.maintenanceReserve) : null) : undefined,
+        hausgeld: body.hausgeld !== undefined ? parseOptFloat(body.hausgeld) : undefined,
+        hausgeldDetails: body.hausgeldDetails !== undefined ? (typeof body.hausgeldDetails === "string" ? body.hausgeldDetails : JSON.stringify(body.hausgeldDetails)) : undefined,
+        nonRecoverableCosts: body.nonRecoverableCosts !== undefined ? parseOptFloat(body.nonRecoverableCosts) : undefined,
+        maintenanceReserve: body.maintenanceReserve !== undefined ? parseOptFloat(body.maintenanceReserve) : undefined,
       },
       include: {
         tenants: {

@@ -30,6 +30,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { RentAdjustmentDialog } from "@/components/RentAdjustmentDialog";
 import { PropertyInvestmentsDialog, PropertyInvestment } from "@/components/PropertyInvestmentsDialog";
+import { parseUnitTokens } from "@/lib/property-matching";
 
 interface Tenant {
   id: string;
@@ -80,6 +81,8 @@ interface Property {
   brokerCosts?: number | null;
   otherAncillaryCosts?: number | null;
   buildingSharePercent?: number | null;
+  hausgeld?: number | null;
+  hausgeldDetails?: string | null;
   nonRecoverableCosts?: number | null;
   maintenanceReserve?: number | null;
   tenant: Tenant | null;
@@ -450,6 +453,18 @@ function EditPropertyDialog({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const initialUnitDetails: Record<string, string> = {};
+  if (property.hausgeldDetails) {
+    try {
+      const parsed = typeof property.hausgeldDetails === "string" ? JSON.parse(property.hausgeldDetails) : property.hausgeldDetails;
+      for (const [k, v] of Object.entries(parsed)) {
+        const num = typeof v === "number" ? v : (v as any)?.hausgeld != null ? (v as any).hausgeld : null;
+        if (num != null) initialUnitDetails[k] = formatGermanInput(num);
+      }
+    } catch {}
+  }
+  const [unitDetails, setUnitDetails] = useState<Record<string, string>>(initialUnitDetails);
+
   const [form, setForm] = useState({
     name: property.name,
     address: property.address,
@@ -467,13 +482,39 @@ function EditPropertyDialog({
     brokerCosts: property.brokerCosts != null ? formatGermanInput(property.brokerCosts) : "",
     otherAncillaryCosts: property.otherAncillaryCosts != null ? formatGermanInput(property.otherAncillaryCosts) : "",
     buildingSharePercent: property.buildingSharePercent != null ? formatGermanInput(property.buildingSharePercent) : "80",
+    hausgeld: property.hausgeld != null ? formatGermanInput(property.hausgeld) : "",
     nonRecoverableCosts: property.nonRecoverableCosts != null ? formatGermanInput(property.nonRecoverableCosts) : "",
     maintenanceReserve: property.maintenanceReserve != null ? formatGermanInput(property.maintenanceReserve) : "",
   });
 
+  const handleUnitDetailChange = (unitKey: string, val: string) => {
+    const updated = { ...unitDetails, [unitKey]: val };
+    setUnitDetails(updated);
+    const sum = Object.values(updated).reduce((acc, v) => acc + (parseGermanNumber(v) || 0), 0);
+    if (sum > 0) {
+      setForm((prev) => ({ ...prev, hausgeld: formatGermanInput(sum) }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+
+    let hausgeldDetailsPayload: string | null = null;
+    const tokens = parseUnitTokens(form.unitNumber);
+    if (tokens.length > 1) {
+      const detailsObj: Record<string, { hausgeld: number }> = {};
+      for (const token of tokens) {
+        const val = parseGermanNumber(unitDetails[token.raw] || "");
+        if (val > 0) {
+          detailsObj[token.raw] = { hausgeld: val };
+        }
+      }
+      if (Object.keys(detailsObj).length > 0) {
+        hausgeldDetailsPayload = JSON.stringify(detailsObj);
+      }
+    }
+
     const payload = {
       ...form,
       purchasePrice: form.purchasePrice ? parseGermanNumber(form.purchasePrice) : null,
@@ -484,6 +525,8 @@ function EditPropertyDialog({
       brokerCosts: form.brokerCosts ? parseGermanNumber(form.brokerCosts) : null,
       otherAncillaryCosts: form.otherAncillaryCosts ? parseGermanNumber(form.otherAncillaryCosts) : null,
       buildingSharePercent: form.buildingSharePercent ? parseGermanNumber(form.buildingSharePercent) : 80,
+      hausgeld: form.hausgeld ? parseGermanNumber(form.hausgeld) : null,
+      hausgeldDetails: hausgeldDetailsPayload,
       nonRecoverableCosts: form.nonRecoverableCosts ? parseGermanNumber(form.nonRecoverableCosts) : null,
       maintenanceReserve: form.maintenanceReserve ? parseGermanNumber(form.maintenanceReserve) : null,
     };
@@ -672,27 +715,27 @@ function EditPropertyDialog({
             </div>
           </div>
 
-          {/* Laufende Kosten & Rücklagen für Cashflow-Berechnung */}
+          {/* Hausgeld & Erhaltungsrücklage (Monatliche Zahlung an WEG / Hausverwaltung) */}
           <div className="space-y-3 pt-3 border-t border-border">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-              <Coins className="h-3.5 w-3.5" /> Laufende Kosten & Rücklagen (Netto-Cashflow)
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+              <Coins className="h-3.5 w-3.5" /> Hausgeld & Erhaltungsrücklage (Zahlung an WEG)
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Nicht-umlagef. Kosten (€/Mo)</Label>
+                <Label className="text-xs">Hausgeld (€/Mo)</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
-                  placeholder={`Pauschale: ${formatGermanNumber(parseFloat(form.sqm || "0") * 0.35 + 25, 2)} €`}
-                  value={form.nonRecoverableCosts}
-                  onChange={(e) => setForm({ ...form, nonRecoverableCosts: e.target.value })}
+                  placeholder="z. B. 160,00"
+                  value={form.hausgeld}
+                  onChange={(e) => setForm({ ...form, hausgeld: e.target.value })}
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  WEG-Hausgeld (nicht umlagef.), SEV, Verwaltergebühr. Wenn leer: Pauschale (0,35 €/m² + 25 €)
+                  Laufende Bewirtschaftung / Wirtschaftsplan (umlagef. & nicht-umlagef.)
                 </p>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Instandhaltungsrücklage (€/Mo)</Label>
+                <Label className="text-xs">Erhaltungsrücklage (€/Mo)</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -701,7 +744,68 @@ function EditPropertyDialog({
                   onChange={(e) => setForm({ ...form, maintenanceReserve: e.target.value })}
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  Monatlicher Rücklagenbeitrag. Wenn leer: Standard (1,20 €/m²)
+                  Monatliche Zuführung zur WEG-Instandhaltungsrücklage
+                </p>
+              </div>
+            </div>
+
+            {/* Live-Berechnung der Gesamt-Soll-Zahlung an WEG */}
+            <div className="rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60 p-2.5 text-xs flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                  <span>Monatliche Gesamtzahlung an WEG:</span>
+                  <span className="font-mono text-sm text-indigo-700 dark:text-indigo-300 font-bold">
+                    {formatCurrency(
+                      (parseGermanNumber(form.hausgeld) || 0) +
+                      (parseGermanNumber(form.maintenanceReserve) || 0)
+                    )}
+                  </span>
+                </div>
+                <p className="text-[10px] text-indigo-700/80 dark:text-indigo-300/80">
+                  Wird auf der Banküberweisungs-Seite für den automatischen Soll-Ist-Abgleich herangezogen.
+                </p>
+              </div>
+            </div>
+
+            {/* Mehrere Wohneinheiten (z.B. WE 5 und WE 6)? Aufteilung ermöglichen */}
+            {parseUnitTokens(form.unitNumber).length > 1 && (
+              <div className="p-2.5 rounded-lg border border-border/80 bg-muted/40 space-y-2">
+                <div className="text-[11px] font-semibold flex items-center justify-between">
+                  <span>Aufteilung nach Wohneinheiten ({parseUnitTokens(form.unitNumber).map((u) => u.raw).join(", ")}):</span>
+                  <span className="text-[10px] text-muted-foreground">Für getrennte Banküberweisungen je WE</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {parseUnitTokens(form.unitNumber).map((token) => (
+                    <div key={token.raw} className="space-y-1">
+                      <Label className="text-[11px] font-medium">{token.raw} (€/Mo):</Label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="z. B. 250,00"
+                        value={unitDetails[token.raw] || ""}
+                        onChange={(e) => handleUnitDetailChange(token.raw, e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Parameter für Netto-Cashflow */}
+            <div className="pt-2">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Nicht-umlagef. Kosten (€/Mo) – optional für Cashflow-Formel</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={`Pauschale: ${formatGermanNumber(parseFloat(form.sqm || "0") * 0.35 + 25, 2)} €`}
+                  value={form.nonRecoverableCosts}
+                  onChange={(e) => setForm({ ...form, nonRecoverableCosts: e.target.value })}
+                  className="h-8 text-xs text-muted-foreground"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  SEV, Verwaltergebühr etc. Wenn leer: Pauschale (0,35 €/m² + 25 €)
                 </p>
               </div>
             </div>
@@ -1959,26 +2063,23 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
           }
         />
 
-        {/* Laufende Bewirtschaftungskosten (Netto-Cashflow Parameter) */}
+        {/* Laufende Bewirtschaftungskosten (WEG-Hausgeld & Rücklagen) */}
         <div className="bg-secondary/30 rounded-xl p-2.5 text-xs space-y-1.5 border border-border/40">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="flex items-center gap-1">
-              <Coins className="h-3 w-3 text-emerald-500" /> Nicht-umlagef. Kosten:
+              <Coins className="h-3 w-3 text-indigo-500" /> Hausgeld (WEG):
             </span>
             <div className="flex items-center gap-1.5 font-mono">
               <span className="font-semibold text-foreground">
-                {property.nonRecoverableCosts != null && property.nonRecoverableCosts > 0
-                  ? `${formatCurrency(property.nonRecoverableCosts)}/Mo`
-                  : `${formatCurrency(property.sqm * 0.35 + 25)}/Mo`}
+                {property.hausgeld != null && property.hausgeld > 0
+                  ? `${formatCurrency(property.hausgeld)}/Mo`
+                  : "–"}
               </span>
-              <Badge variant={property.nonRecoverableCosts != null && property.nonRecoverableCosts > 0 ? "secondary" : "outline"} className="text-[9px] h-4 px-1 py-0 font-sans">
-                {property.nonRecoverableCosts != null && property.nonRecoverableCosts > 0 ? "Individuell" : "Pauschale"}
-              </Badge>
             </div>
           </div>
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="flex items-center gap-1">
-              <ShieldCheck className="h-3 w-3 text-amber-500" /> Instandhaltungsrücklage:
+              <ShieldCheck className="h-3 w-3 text-amber-500" /> Erhaltungsrücklage:
             </span>
             <div className="flex items-center gap-1.5 font-mono">
               <span className="font-semibold text-foreground">
@@ -1991,6 +2092,20 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
               </Badge>
             </div>
           </div>
+          {((property.hausgeld != null && property.hausgeld > 0) || (property.maintenanceReserve != null && property.maintenanceReserve > 0)) && (
+            <div className="flex items-center justify-between pt-1 border-t border-border/40 text-xs">
+              <span className="font-medium text-foreground">Gesamt-Soll an WEG:</span>
+              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                {formatCurrency((property.hausgeld || 0) + (property.maintenanceReserve || 0))}/Mo
+              </span>
+            </div>
+          )}
+          {property.nonRecoverableCosts != null && property.nonRecoverableCosts > 0 && (
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground/80 pt-0.5">
+              <span>Nicht-umlagef. Kosten:</span>
+              <span className="font-mono">{formatCurrency(property.nonRecoverableCosts)}/Mo</span>
+            </div>
+          )}
         </div>
 
         {/* Mieterbereich: Entweder Vermietet ODER Leerstand */}
@@ -2311,6 +2426,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
     brokerCosts: "",
     otherAncillaryCosts: "",
     buildingSharePercent: "80",
+    hausgeld: "",
     nonRecoverableCosts: "",
     maintenanceReserve: "",
     // Mieterdaten (optional)
@@ -2327,9 +2443,35 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
     tenantContractStart: "",
   });
 
+  const [unitDetails, setUnitDetails] = useState<Record<string, string>>({});
+
+  const handleUnitDetailChange = (unitKey: string, val: string) => {
+    const updated = { ...unitDetails, [unitKey]: val };
+    setUnitDetails(updated);
+    const sum = Object.values(updated).reduce((acc, v) => acc + (parseGermanNumber(v) || 0), 0);
+    if (sum > 0) {
+      setForm((prev) => ({ ...prev, hausgeld: formatGermanInput(sum) }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+
+    let hausgeldDetailsPayload: string | null = null;
+    const tokens = parseUnitTokens(form.unitNumber);
+    if (tokens.length > 1) {
+      const detailsObj: Record<string, { hausgeld: number }> = {};
+      for (const token of tokens) {
+        const val = parseGermanNumber(unitDetails[token.raw] || "");
+        if (val > 0) {
+          detailsObj[token.raw] = { hausgeld: val };
+        }
+      }
+      if (Object.keys(detailsObj).length > 0) {
+        hausgeldDetailsPayload = JSON.stringify(detailsObj);
+      }
+    }
 
     const payload = {
       name: form.name,
@@ -2348,6 +2490,8 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
       brokerCosts: form.brokerCosts ? parseGermanNumber(form.brokerCosts) : null,
       otherAncillaryCosts: form.otherAncillaryCosts ? parseGermanNumber(form.otherAncillaryCosts) : null,
       buildingSharePercent: form.buildingSharePercent ? parseGermanNumber(form.buildingSharePercent) : 80,
+      hausgeld: form.hausgeld ? parseGermanNumber(form.hausgeld) : null,
+      hausgeldDetails: hausgeldDetailsPayload,
       nonRecoverableCosts: form.nonRecoverableCosts ? parseGermanNumber(form.nonRecoverableCosts) : null,
       maintenanceReserve: form.maintenanceReserve ? parseGermanNumber(form.maintenanceReserve) : null,
       ...(withTenant && form.tenantLastName
@@ -2400,6 +2544,7 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
         brokerCosts: "",
         otherAncillaryCosts: "",
         buildingSharePercent: "80",
+        hausgeld: "",
         nonRecoverableCosts: "",
         maintenanceReserve: "",
         tenantFirstName: "",
@@ -2597,27 +2742,27 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
             </div>
           </div>
 
-          {/* Laufende Kosten & Rücklagen für Cashflow-Berechnung */}
+          {/* Hausgeld & Erhaltungsrücklage (Monatliche Zahlung an WEG / Hausverwaltung) */}
           <div className="space-y-3 pt-3 border-t border-border">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-              <Coins className="h-3.5 w-3.5" /> Laufende Kosten & Rücklagen (Netto-Cashflow)
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+              <Coins className="h-3.5 w-3.5" /> Hausgeld & Erhaltungsrücklage (Zahlung an WEG)
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Nicht-umlagef. Kosten (€/Mo)</Label>
+                <Label className="text-xs">Hausgeld (€/Mo)</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
-                  placeholder={`Pauschale: ${formatGermanNumber(parseFloat(form.sqm || "0") * 0.35 + 25, 2)} €`}
-                  value={form.nonRecoverableCosts}
-                  onChange={(e) => setForm({ ...form, nonRecoverableCosts: e.target.value })}
+                  placeholder="z. B. 160,00"
+                  value={form.hausgeld}
+                  onChange={(e) => setForm({ ...form, hausgeld: e.target.value })}
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  WEG-Hausgeld (nicht umlagef.), SEV, Verwaltergebühr. Wenn leer: Pauschale (0,35 €/m² + 25 €)
+                  Laufende Bewirtschaftung / Wirtschaftsplan (umlagef. & nicht-umlagef.)
                 </p>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Instandhaltungsrücklage (€/Mo)</Label>
+                <Label className="text-xs">Erhaltungsrücklage (€/Mo)</Label>
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -2626,7 +2771,68 @@ function AddPropertyDialog({ onRefresh }: { onRefresh: () => void }) {
                   onChange={(e) => setForm({ ...form, maintenanceReserve: e.target.value })}
                 />
                 <p className="text-[10px] text-muted-foreground">
-                  Monatlicher Rücklagenbeitrag. Wenn leer: Standard (1,20 €/m²)
+                  Monatliche Zuführung zur WEG-Instandhaltungsrücklage
+                </p>
+              </div>
+            </div>
+
+            {/* Live-Berechnung der Gesamt-Soll-Zahlung an WEG */}
+            <div className="rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60 p-2.5 text-xs flex items-center justify-between">
+              <div className="space-y-0.5">
+                <div className="font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                  <span>Monatliche Gesamtzahlung an WEG:</span>
+                  <span className="font-mono text-sm text-indigo-700 dark:text-indigo-300 font-bold">
+                    {formatCurrency(
+                      (parseGermanNumber(form.hausgeld) || 0) +
+                      (parseGermanNumber(form.maintenanceReserve) || 0)
+                    )}
+                  </span>
+                </div>
+                <p className="text-[10px] text-indigo-700/80 dark:text-indigo-300/80">
+                  Wird auf der Banküberweisungs-Seite für den automatischen Soll-Ist-Abgleich herangezogen.
+                </p>
+              </div>
+            </div>
+
+            {/* Mehrere Wohneinheiten (z.B. WE 5 und WE 6)? Aufteilung ermöglichen */}
+            {parseUnitTokens(form.unitNumber).length > 1 && (
+              <div className="p-2.5 rounded-lg border border-border/80 bg-muted/40 space-y-2">
+                <div className="text-[11px] font-semibold flex items-center justify-between">
+                  <span>Aufteilung nach Wohneinheiten ({parseUnitTokens(form.unitNumber).map((u) => u.raw).join(", ")}):</span>
+                  <span className="text-[10px] text-muted-foreground">Für getrennte Banküberweisungen je WE</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {parseUnitTokens(form.unitNumber).map((token) => (
+                    <div key={token.raw} className="space-y-1">
+                      <Label className="text-[11px] font-medium">{token.raw} (€/Mo):</Label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="z. B. 250,00"
+                        value={unitDetails[token.raw] || ""}
+                        onChange={(e) => handleUnitDetailChange(token.raw, e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Parameter für Netto-Cashflow */}
+            <div className="pt-2">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Nicht-umlagef. Kosten (€/Mo) – optional für Cashflow-Formel</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder={`Pauschale: ${formatGermanNumber(parseFloat(form.sqm || "0") * 0.35 + 25, 2)} €`}
+                  value={form.nonRecoverableCosts}
+                  onChange={(e) => setForm({ ...form, nonRecoverableCosts: e.target.value })}
+                  className="h-8 text-xs text-muted-foreground"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  SEV, Verwaltergebühr etc. Wenn leer: Pauschale (0,35 €/m² + 25 €)
                 </p>
               </div>
             </div>

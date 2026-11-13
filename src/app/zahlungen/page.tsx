@@ -71,6 +71,10 @@ interface Payment {
     id: string;
     name: string;
     address: string;
+    unitNumber?: string | null;
+    hausgeld?: number | null;
+    maintenanceReserve?: number | null;
+    hausgeldDetails?: string | null;
   } | null;
   loanId?: string | null;
   loan?: {
@@ -1281,11 +1285,14 @@ function EditPaymentDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="NONE">-- Keine Immobilie direkt zugeordnet --</SelectItem>
-                {properties.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} ({p.address})
-                  </SelectItem>
-                ))}
+                {properties.map((p) => {
+                  const hg = (p.hausgeld || 0) + (p.maintenanceReserve || 0);
+                  return (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} ({p.address}){hg > 0 ? ` • Hausgeld-Soll: ${formatCurrency(hg)}` : ""}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
@@ -3765,11 +3772,24 @@ function ZahlungenContent() {
                             payment.loan ||
                             loans.find((l) => Math.abs(l.monthlyPayment - Math.abs(payment.amount)) < 0.05);
 
+                          const matchedProperty =
+                            payment.property ||
+                            properties.find((p) => p.id === payment.propertyId) ||
+                            fullTenant?.property ||
+                            matchedLoan?.property ||
+                            (isHausgeld
+                              ? findBestMatchingProperty(
+                                  `${payment.payerName || ""} ${payment.reference || ""}`,
+                                  properties
+                                )?.property
+                              : null);
+
                           const propName =
                             tenant?.property?.name ||
                             payment.property?.name ||
                             payment.loan?.property?.name ||
-                            matchedLoan?.property?.name;
+                            matchedLoan?.property?.name ||
+                            (isHausgeld ? matchedProperty?.name : null);
 
                           const paymentMonth =
                             payment.period && /^\d{4}-\d{2}$/.test(payment.period)
@@ -3797,6 +3817,7 @@ function ZahlungenContent() {
 
                           let soll: number | null = null;
                           let diff: number | null = null;
+                          let hausgeldUnitHint: string | null = null;
 
                           if (isRent) {
                             soll = resolvedRent
@@ -3809,6 +3830,58 @@ function ZahlungenContent() {
                             if (matchedLoan) {
                               soll = matchedLoan.monthlyPayment;
                               diff = Math.abs(payment.amount) - matchedLoan.monthlyPayment;
+                            }
+                          } else if (isHausgeld && matchedProperty) {
+                            // 1. Prüfen auf Wohneinheiten-Detail (z.B. WE 5: 250 €, WE 6: 340 €)
+                            if (matchedProperty.hausgeldDetails) {
+                              try {
+                                const details =
+                                  typeof matchedProperty.hausgeldDetails === "string"
+                                    ? JSON.parse(matchedProperty.hausgeldDetails)
+                                    : matchedProperty.hausgeldDetails;
+                                const refText = `${payment.reference || ""} ${payment.payerName || ""}`.toLowerCase();
+
+                                for (const [unitKey, unitVal] of Object.entries(details)) {
+                                  const uNum = unitKey.replace(/\D/g, "");
+                                  const normKey = unitKey.toLowerCase();
+                                  const matchesUnit =
+                                    refText.includes(normKey) ||
+                                    (uNum &&
+                                      (refText.includes(`we${uNum}`) ||
+                                        refText.includes(`w${uNum}`) ||
+                                        refText.includes(`we ${uNum}`) ||
+                                        refText.includes(`whg ${uNum}`) ||
+                                        refText.includes(`whg. ${uNum}`)));
+
+                                  if (matchesUnit) {
+                                    const valNum =
+                                      typeof unitVal === "number"
+                                        ? unitVal
+                                        : (unitVal as any)?.hausgeld != null
+                                        ? Number((unitVal as any).hausgeld) + Number((unitVal as any).maintenanceReserve || 0)
+                                        : null;
+                                    if (valNum != null && valNum > 0) {
+                                      soll = valNum;
+                                      hausgeldUnitHint = unitKey;
+                                      break;
+                                    }
+                                  }
+                                }
+                              } catch (e) {
+                                // ignore
+                              }
+                            }
+
+                            // 2. Falls kein Einheiten-Match, Gesamt-Soll der Wohnung verwenden (Hausgeld + Erhaltungsrücklage)
+                            if (soll === null) {
+                              const totalWeg = (matchedProperty.hausgeld || 0) + (matchedProperty.maintenanceReserve || 0);
+                              if (totalWeg > 0) {
+                                soll = totalWeg;
+                              }
+                            }
+
+                            if (soll !== null) {
+                              diff = Math.abs(payment.amount) - soll;
                             }
                           }
 
@@ -3874,7 +3947,16 @@ function ZahlungenContent() {
                                 ) : isUtility ? (
                                   <span className="text-cyan-700 dark:text-cyan-300 italic text-[11px]">NK-Abrechnung</span>
                                 ) : isHausgeld ? (
-                                  <span className="text-indigo-700 dark:text-indigo-300 italic text-[11px]">Hausgeld</span>
+                                  soll !== null ? (
+                                    <div>
+                                      <span className="font-semibold text-foreground">{formatCurrency(soll)}</span>
+                                      <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
+                                        Soll-Hausgeld{hausgeldUnitHint ? ` (${hausgeldUnitHint})` : ""}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-indigo-700 dark:text-indigo-300 italic text-[11px]">Hausgeld</span>
+                                  )
                                 ) : isRepair ? (
                                   <span className="text-amber-700 dark:text-amber-300 italic text-[11px]">Baumaterial / Reparatur</span>
                                 ) : (
@@ -3922,6 +4004,26 @@ function ZahlungenContent() {
                                   <span className="text-cyan-700 dark:text-cyan-300 font-semibold text-[11px]" title="Zahlung für Nebenkostenabrechnung (keine Mietüberzahlung)">
                                     {payment.amount > 0 ? "+" : ""}{formatCurrency(payment.amount)} (NK)
                                   </span>
+                                ) : isHausgeld ? (
+                                  payment.amount > 0 ? (
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]" title="Hausgeld-Guthaben / Abrechnung">
+                                      +{formatCurrency(payment.amount)} (Guthaben)
+                                    </span>
+                                  ) : diff !== null ? (
+                                    Math.abs(diff) < 0.01 ? (
+                                      <span className="text-emerald-600 dark:text-emerald-400">±0,00 € (vollständig)</span>
+                                    ) : diff > 0 ? (
+                                      <span className="text-amber-600 dark:text-amber-400" title="Zahlung übersteigt monatliches Soll-Hausgeld">
+                                        +{formatCurrency(diff)} (Überzahlung)
+                                      </span>
+                                    ) : (
+                                      <span className="text-rose-600 dark:text-rose-400" title="Zahlung geringer als monatliches Soll-Hausgeld">
+                                        {formatCurrency(diff)}
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-muted-foreground">–</span>
+                                  )
                                 ) : (
                                   <span className="text-muted-foreground">–</span>
                                 )}
@@ -4008,10 +4110,17 @@ function ZahlungenContent() {
                                     <Landmark className="h-3 w-3 shrink-0" />
                                     <span>{(payment.loan || matchedLoan)?.bank || (payment.loan || matchedLoan)?.label}</span>
                                   </div>
-                                ) : payment.property ? (
-                                  <div className="flex items-center gap-1 font-medium text-muted-foreground text-xs">
-                                    <Building2 className="h-3 w-3 shrink-0" />
-                                    <span>{payment.property.name}</span>
+                                ) : payment.property || (isHausgeld && matchedProperty) ? (
+                                  <div className="flex items-center gap-1.5 font-medium text-xs flex-wrap">
+                                    <div className="flex items-center gap-1 text-muted-foreground">
+                                      <Building2 className="h-3 w-3 shrink-0" />
+                                      <span>{(payment.property || matchedProperty)?.name}</span>
+                                    </div>
+                                    {hausgeldUnitHint && (
+                                      <span className="text-[10px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 px-1 py-0.2 rounded font-medium">
+                                        {hausgeldUnitHint}
+                                      </span>
+                                    )}
                                   </div>
                                 ) : (() => {
                                   const bldgMatch = findBestMatchingProperty(

@@ -105,6 +105,8 @@ export async function POST(request: Request) {
         brokerCosts: broker,
         otherAncillaryCosts: otherAnc,
         buildingSharePercent: body.buildingSharePercent !== undefined && body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80,
+        hausgeld: parseOptFloat(body.hausgeld),
+        hausgeldDetails: body.hausgeldDetails !== undefined ? (typeof body.hausgeldDetails === "string" ? body.hausgeldDetails : JSON.stringify(body.hausgeldDetails)) : null,
         nonRecoverableCosts: parseOptFloat(body.nonRecoverableCosts),
         maintenanceReserve: parseOptFloat(body.maintenanceReserve),
         ...(tenantInput ? { tenants: { create: [tenantInput] } } : {}),

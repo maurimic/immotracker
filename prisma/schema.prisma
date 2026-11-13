@@ -34,8 +34,10 @@ model Property {
   buildingSharePercent Float? @default(80) // Gebäudeanteil in % (Standard 80%) für AfA & 15%-Grenze
   
   // Laufende Bewirtschaftung & Cashflow (monatlich)
-  nonRecoverableCosts Float?   // Nicht-umlagefähige Betriebskosten / Hausgeld monatlich in € (Verwaltung, Instandhaltung WEG)
-  maintenanceReserve  Float?   // Eigene monatliche Instandhaltungsrücklage in € (optional; falls leer, gilt Standard 1,20 €/m²)
+  hausgeld            Float?   // Monatliches Hausgeld an WEG in € (operativ / Wirtschaftsplan)
+  maintenanceReserve  Float?   // Monatliche Erhaltungsrücklage / Instandhaltungsrücklage an WEG in €
+  hausgeldDetails     String?  // JSON für Einheiten-Aufteilung bei Mehrfach-WEs (z.B. {"WE5": 250, "WE6": 340})
+  nonRecoverableCosts Float?   // Nicht-umlagefähige Betriebskosten monatlich in € (Verwaltung, SEV)
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

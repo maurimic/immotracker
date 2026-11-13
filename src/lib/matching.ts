@@ -72,6 +72,10 @@ export function detectPaymentCategory(
   if (
     combined.includes("hausgeld") ||
     combined.includes("sonderumlage") ||
+    combined.includes("erhaltungsrücklage") ||
+    combined.includes("erhaltungsruecklage") ||
+    combined.includes("instandhaltungsrücklage") ||
+    combined.includes("instandhaltungsruecklage") ||
     combined.includes("weg alter dortmunder") ||
     combined.includes("weg siemens")
   ) {
@@ -282,6 +286,10 @@ export function ruleBasedMatch(
     rowName.includes("hausgeld") ||
     rowRef.includes("sonderumlage") ||
     rowName.includes("sonderumlage") ||
+    rowRef.includes("erhaltungsrücklage") ||
+    rowRef.includes("erhaltungsruecklage") ||
+    rowRef.includes("instandhaltungsrücklage") ||
+    rowRef.includes("instandhaltungsruecklage") ||
     rowName.startsWith("weg ") ||
     rowName.includes(" weg ");
 

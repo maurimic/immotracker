@@ -56,6 +56,16 @@ export async function ensureSchema() {
         `ALTER TABLE "properties" ADD COLUMN "unitNumber" TEXT;`
       );
     }
+    if (!colNames.has("hausgeld")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "hausgeld" REAL;`
+      );
+    }
+    if (!colNames.has("hausgeldDetails")) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "properties" ADD COLUMN "hausgeldDetails" TEXT;`
+      );
+    }
 
     // Standard-Wohneinheiten einmalig setzen, sofern noch nicht initialisiert
     const seedCheck = (await prisma.$queryRawUnsafe<any[]>(
@@ -91,6 +101,44 @@ export async function ensureSchema() {
       await prisma.$executeRawUnsafe(`
         INSERT OR IGNORE INTO "app_settings" ("key", "value", "updatedAt")
         VALUES ('unit_numbers_seeded', '1', CURRENT_TIMESTAMP);
+      `);
+    }
+
+    // Initiales Hausgeld für bestehende Wohnungen setzen, sofern noch nicht initialisiert
+    const hausgeldSeedCheck = (await prisma.$queryRawUnsafe<any[]>(
+      `SELECT "value" FROM "app_settings" WHERE "key" = 'hausgeld_seeded' LIMIT 1;`
+    )) || [];
+    if (hausgeldSeedCheck.length === 0) {
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "hausgeld" = 210
+        WHERE "hausgeld" IS NULL
+          AND (LOWER("address") LIKE '%siemen%' OR LOWER("name") LIKE '%siemen%')
+          AND (LOWER(COALESCE("floor", '')) = 'eg' OR LOWER("name") LIKE '%eg%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "hausgeld" = 590,
+            "hausgeldDetails" = '{"WE5":{"hausgeld":250},"WE6":{"hausgeld":340}}'
+        WHERE "hausgeld" IS NULL
+          AND (LOWER("address") LIKE '%siemen%' OR LOWER("name") LIKE '%siemen%')
+          AND (LOWER(COALESCE("floor", '')) LIKE '%2%' OR LOWER("name") LIKE '%2.og%' OR LOWER("name") LIKE '%2og%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "hausgeld" = 178
+        WHERE "hausgeld" IS NULL
+          AND (LOWER("address") LIKE '%dortmunder%' OR LOWER("name") LIKE '%schwerte%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        UPDATE "properties"
+        SET "hausgeld" = 195
+        WHERE "hausgeld" IS NULL
+          AND (LOWER("address") LIKE '%bockum%' OR LOWER("name") LIKE '%bockum%');
+      `);
+      await prisma.$executeRawUnsafe(`
+        INSERT OR IGNORE INTO "app_settings" ("key", "value", "updatedAt")
+        VALUES ('hausgeld_seeded', '1', CURRENT_TIMESTAMP);
       `);
     }
 

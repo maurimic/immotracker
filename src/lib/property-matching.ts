@@ -9,6 +9,9 @@ export interface PropertyMatchInfo {
   floor?: string | null;
   unitNumber?: string | null;
   sqm?: number | null;
+  hausgeld?: number | null;
+  maintenanceReserve?: number | null;
+  hausgeldDetails?: string | null;
 }
 
 export interface PropertyMatchCandidate {
