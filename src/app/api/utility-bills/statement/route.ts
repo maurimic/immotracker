@@ -1,97 +1,182 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Generiert Nebenkostenabrechnungen für alle Wohnungen in einem Jahr
- * Umlage nach Flächenanteil (qm)
+ * GET /api/utility-bills/statement
+ * Ruft alle gespeicherten Mieter-Nebenkostenabrechnungen ab
  */
-export async function POST(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const period = searchParams.get("period") || String(new Date().getFullYear() - 1);
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const period = searchParams.get("period");
 
-  const [properties, bills] = await Promise.all([
-    prisma.property.findMany({
-      include: { tenants: true },
-    }),
-    prisma.utilityBill.findMany({
-      where: { period, isAllocatable: true },
-    }),
-  ]);
+    const where: any = {};
+    if (period && period !== "ALL") {
+      where.period = period;
+    }
 
-  if (bills.length === 0) {
-    return NextResponse.json({ error: "Keine umlegbaren Kosten für diesen Zeitraum gefunden" }, { status: 404 });
-  }
-
-  const totalSqm = properties.reduce((s, p) => s + p.sqm, 0);
-  const totalAllocatableCosts = bills.reduce((s, b) => s + b.amount, 0);
-
-  // Kategorien aufsummieren
-  const costsByCategory: Record<string, number> = {};
-  for (const bill of bills) {
-    costsByCategory[bill.category] = (costsByCategory[bill.category] || 0) + bill.amount;
-  }
-
-  const statements = [];
-
-  for (const property of properties) {
-    const activeTenant = property.tenants?.find((t) => t.isCurrent);
-    if (!activeTenant) continue;
-
-    const share = property.sqm / totalSqm;
-    const propertyShare = totalAllocatableCosts * share;
-
-    // Vorauszahlungen berechnen
-    const prepayments = await prisma.payment.aggregate({
-      where: {
-        tenantId: activeTenant.id,
-        period: { startsWith: period },
-        category: "RENT",
-      },
-      _sum: { amount: true },
-    });
-
-    // Nur NK-VZ (Vorauszahlung), nicht Kaltmiete
-    const monthlyNKVZ = activeTenant.utilities;
-    const annualPrepayments = monthlyNKVZ * 12;
-    const balance = annualPrepayments - propertyShare;
-
-    // Statement in DB speichern
-    const statement = await prisma.utilityStatement.upsert({
-      where: { id: `${property.id}-${period}` },
-      create: {
-        id: `${property.id}-${period}`,
-        propertyId: property.id,
-        period,
-        totalCosts: propertyShare,
-        prepayments: annualPrepayments,
-        balance,
-        lineItems: {
-          create: Object.entries(costsByCategory).map(([category, total]) => ({
-            category,
-            totalCost: total,
-            share: share * 100,
-            amount: total * share,
-          })),
+    const statements = await prisma.utilityStatement.findMany({
+      where,
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            unitNumber: true,
+            sqm: true,
+            unitDetails: true,
+          },
         },
+        lineItems: true,
       },
-      update: {
-        totalCosts: propertyShare,
-        prepayments: annualPrepayments,
-        balance,
-        generatedAt: new Date(),
-      },
+      orderBy: { generatedAt: "desc" },
     });
 
-    statements.push({
-      property: property.name,
-      tenant: `${activeTenant.firstName} ${activeTenant.lastName}`,
-      sqm: property.sqm,
-      share: (share * 100).toFixed(2),
-      totalCosts: propertyShare,
-      prepayments: annualPrepayments,
-      balance,
-    });
+    return NextResponse.json({ statements });
+  } catch (err: any) {
+    console.error("Error fetching utility statements:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
+}
 
-  return NextResponse.json({ period, statements });
+/**
+ * POST /api/utility-bills/statement
+ * Speichert eine Mieter-Nebenkostenabrechnung mit allen BetrKV-Einzelpositionen
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const {
+      id,
+      propertyId,
+      subUnitKey,
+      period,
+      sqm,
+      tenantName,
+      tenantAddress,
+      totalCosts,
+      prepayments,
+      balance,
+      notes,
+      detailsJson,
+      items,
+    } = body;
+
+    if (!propertyId || !period) {
+      return NextResponse.json(
+        { error: "Wohnung und Abrechnungszeitraum sind erforderlich" },
+        { status: 400 }
+      );
+    }
+
+    const targetId = id || `${propertyId}-${subUnitKey || "MAIN"}-${period}`;
+
+    // Transaktion: Vorherige Items löschen und Statement mit neuen Items anlegen/aktualisieren
+    const statement = await prisma.$transaction(async (tx) => {
+      // Existiert bereits?
+      const existing = await tx.utilityStatement.findUnique({
+        where: { id: targetId },
+      });
+
+      if (existing) {
+        // Alte Line-Items löschen
+        await tx.utilityStatementItem.deleteMany({
+          where: { statementId: targetId },
+        });
+
+        // Statement aktualisieren
+        return tx.utilityStatement.update({
+          where: { id: targetId },
+          data: {
+            subUnitKey: subUnitKey || null,
+            tenantName: tenantName || null,
+            tenantAddress: tenantAddress || null,
+            sqm: sqm ? Number(sqm) : null,
+            period: String(period),
+            totalCosts: Number(totalCosts) || 0,
+            prepayments: Number(prepayments) || 0,
+            balance: Number(balance) || 0,
+            notes: notes || null,
+            detailsJson: typeof detailsJson === "string" ? detailsJson : JSON.stringify(detailsJson || {}),
+            generatedAt: new Date(),
+            lineItems: {
+              create: (items || []).map((it: any) => ({
+                category: it.category || "OTHER",
+                name: it.name || null,
+                totalCost: Number(it.totalCost) || Number(it.amount) || 0,
+                share: Number(it.share) || 100,
+                distributionKey: it.distributionKey || null,
+                amount: Number(it.amount) || 0,
+              })),
+            },
+          },
+          include: {
+            property: true,
+            lineItems: true,
+          },
+        });
+      } else {
+        // Neu anlegen
+        return tx.utilityStatement.create({
+          data: {
+            id: targetId,
+            propertyId,
+            subUnitKey: subUnitKey || null,
+            tenantName: tenantName || null,
+            tenantAddress: tenantAddress || null,
+            sqm: sqm ? Number(sqm) : null,
+            period: String(period),
+            totalCosts: Number(totalCosts) || 0,
+            prepayments: Number(prepayments) || 0,
+            balance: Number(balance) || 0,
+            notes: notes || null,
+            detailsJson: typeof detailsJson === "string" ? detailsJson : JSON.stringify(detailsJson || {}),
+            lineItems: {
+              create: (items || []).map((it: any) => ({
+                category: it.category || "OTHER",
+                name: it.name || null,
+                totalCost: Number(it.totalCost) || Number(it.amount) || 0,
+                share: Number(it.share) || 100,
+                distributionKey: it.distributionKey || null,
+                amount: Number(it.amount) || 0,
+              })),
+            },
+          },
+          include: {
+            property: true,
+            lineItems: true,
+          },
+        });
+      }
+    });
+
+    return NextResponse.json({ success: true, statement });
+  } catch (err: any) {
+    console.error("Error saving utility statement:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/utility-bills/statement?id=...
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "Statement-ID erforderlich" }, { status: 400 });
+    }
+
+    await prisma.utilityStatement.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true, deletedId: id });
+  } catch (err: any) {
+    console.error("Error deleting utility statement:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }

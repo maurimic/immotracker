@@ -55,6 +55,7 @@ model Property {
   rentAdjustments RentAdjustment[]
   utilityBills   UtilityBill[]
   utilityAllocations UtilityAllocation[]
+  utilityStatements UtilityStatement[]
   documents   Document[]
 
   @@map("properties")
@@ -200,31 +201,40 @@ model UtilityAllocation {
 }
 
 model UtilityStatement {
-  id           String   @id @default(cuid())
-  propertyId   String
-  period       String   // "2024"
+  id            String   @id @default(cuid())
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  subUnitKey    String?  // z.B. "WE5" oder "WE6" bei Verbundwohnungen
+  tenantName    String?  // z.B. "Shyar Daoud"
+  tenantAddress String?  // Anschrift des Mieters
+  sqm           Float?   // Abgerechnete Wohnfläche in m²
+  period        String   // "2024"
   
-  totalCosts   Float
-  prepayments  Float    // Geleistete Vorauszahlungen
-  balance      Float    // Nachzahlung (+) oder Guthaben (-)
+  totalCosts    Float
+  prepayments   Float    // Geleistete Vorauszahlungen
+  balance       Float    // Nachzahlung (+) oder Guthaben (-)
   
-  pdfPath      String?
-  generatedAt  DateTime @default(now())
+  pdfPath       String?
+  notes         String?  // Notizen oder Zahlungsziel
+  detailsJson   String?  // JSON für Metadaten & Einzelpositionen
+  generatedAt   DateTime @default(now())
   
-  lineItems    UtilityStatementItem[]
+  lineItems     UtilityStatementItem[]
 
   @@map("utility_statements")
 }
 
 model UtilityStatementItem {
-  id          String           @id @default(cuid())
-  statementId String
-  statement   UtilityStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  id              String           @id @default(cuid())
+  statementId     String
+  statement       UtilityStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
 
-  category    String
-  totalCost   Float
-  share       Float
-  amount      Float
+  category        String           // "HEATING" | "WATER" | "INSURANCE" | etc.
+  name            String?          // Konkrete Bezeichnung gem. Abrechnung
+  totalCost       Float            // Gesamtkosten Liegenschaft
+  share           Float            // Anteil in %
+  distributionKey String?          // z.B. "Wohnfläche (41 m²)" oder "MEA"
+  amount          Float            // Ihr Anteil in €
 
   @@map("utility_statement_items")
 }
