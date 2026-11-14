@@ -203,7 +203,7 @@ model UtilityAllocation {
 model UtilityStatement {
   id            String   @id @default(cuid())
   propertyId    String
-  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property      Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   subUnitKey    String?  // z.B. "WE5" oder "WE6" bei Verbundwohnungen
   tenantName    String?  // z.B. "Shyar Daoud"
   tenantAddress String?  // Anschrift des Mieters
