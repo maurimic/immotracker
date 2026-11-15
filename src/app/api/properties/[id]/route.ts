@@ -4,6 +4,11 @@ import { safeDate, parseGermanNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
+const sanitizePropertyJson = (str: string | null | undefined) => {
+  if (!str || str === "null" || str === "undefined") return null;
+  return str;
+};
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -30,7 +35,13 @@ export async function GET(
   const activeTenant = property.tenants?.find((t) => t.isCurrent) || null;
   const formerTenants = property.tenants?.filter((t) => !t.isCurrent) || [];
 
-  return NextResponse.json({ ...property, tenant: activeTenant, formerTenants });
+  return NextResponse.json({
+    ...property,
+    unitDetails: sanitizePropertyJson(property.unitDetails),
+    hausgeldDetails: sanitizePropertyJson(property.hausgeldDetails),
+    tenant: activeTenant,
+    formerTenants,
+  });
 }
 
 export async function PUT(
@@ -82,12 +93,10 @@ export async function PUT(
         otherAncillaryCosts: otherAnc,
         buildingSharePercent: body.buildingSharePercent !== undefined ? (body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80) : undefined,
         hausgeld: body.hausgeld !== undefined ? parseOptFloat(body.hausgeld) : undefined,
-        hausgeldDetails: body.hausgeldDetails !== undefined ? (typeof body.hausgeldDetails === "string" ? body.hausgeldDetails : JSON.stringify(body.hausgeldDetails)) : undefined,
-        unitDetails: body.unitDetails !== undefined ? (typeof body.unitDetails === "string" ? body.unitDetails : JSON.stringify(body.unitDetails)) : undefined,
+        hausgeldDetails: body.hausgeldDetails !== undefined ? (body.hausgeldDetails === null || body.hausgeldDetails === "null" || body.hausgeldDetails === "" ? null : typeof body.hausgeldDetails === "string" ? body.hausgeldDetails : JSON.stringify(body.hausgeldDetails)) : undefined,
+        unitDetails: body.unitDetails !== undefined ? (body.unitDetails === null || body.unitDetails === "null" || body.unitDetails === "" ? null : typeof body.unitDetails === "string" ? body.unitDetails : JSON.stringify(body.unitDetails)) : undefined,
         nonRecoverableCosts: body.nonRecoverableCosts !== undefined ? parseOptFloat(body.nonRecoverableCosts) : undefined,
         maintenanceReserve: body.maintenanceReserve !== undefined ? parseOptFloat(body.maintenanceReserve) : undefined,
-        latitude: body.latitude !== undefined ? parseOptFloat(body.latitude) : undefined,
-        longitude: body.longitude !== undefined ? parseOptFloat(body.longitude) : undefined,
       },
       include: {
         tenants: {
@@ -101,10 +110,17 @@ export async function PUT(
       },
     });
 
-    const activeTenant = property.tenants?.find((t) => t.isCurrent) || null;
-    const formerTenants = property.tenants?.filter((t) => !t.isCurrent) || [];
+    const propWithTenants = property as any;
+    const activeTenant = propWithTenants.tenants?.find((t: any) => t.isCurrent) || null;
+    const formerTenants = propWithTenants.tenants?.filter((t: any) => !t.isCurrent) || [];
 
-    return NextResponse.json({ ...property, tenant: activeTenant, formerTenants });
+    return NextResponse.json({
+      ...property,
+      unitDetails: sanitizePropertyJson(property.unitDetails),
+      hausgeldDetails: sanitizePropertyJson(property.hausgeldDetails),
+      tenant: activeTenant,
+      formerTenants,
+    });
   } catch (error: any) {
     console.error("Fehler beim Aktualisieren der Wohnung:", error);
     return NextResponse.json(

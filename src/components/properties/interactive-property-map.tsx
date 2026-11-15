@@ -94,7 +94,10 @@ export default function InteractivePropertyMap({
 
   for (const p of properties) {
     const normalized = p.address
-      .replace(/(\b(eg|1\.og|2\.og|3\.og|dg|erdgeschoss|obergeschoss)\b)/gi, "")
+      .replace(/(\b(eg|1\.og|2\.og|3\.og|4\.og|5\.og|dg|erdgeschoss|obergeschoss|links|rechts)\b)/gi, "")
+      .replace(/,\s*,/g, ",")
+      .replace(/\s+,/g, ",")
+      .replace(/,\s*$/, "")
       .replace(/\s+/g, " ")
       .trim();
 

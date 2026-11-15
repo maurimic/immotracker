@@ -26,11 +26,18 @@ export async function GET() {
     orderBy: { name: "asc" },
   });
 
+  const sanitizePropertyJson = (str: string | null) => {
+    if (!str || str === "null" || str === "undefined") return null;
+    return str;
+  };
+
   const properties = rawProperties.map((p) => {
     const activeTenant = p.tenants?.find((t) => t.isCurrent) || null;
     const formerTenants = p.tenants?.filter((t) => !t.isCurrent) || [];
     return {
       ...p,
+      unitDetails: sanitizePropertyJson(p.unitDetails),
+      hausgeldDetails: sanitizePropertyJson(p.hausgeldDetails),
       tenant: activeTenant,
       formerTenants,
     };
@@ -106,12 +113,10 @@ export async function POST(request: Request) {
         otherAncillaryCosts: otherAnc,
         buildingSharePercent: body.buildingSharePercent !== undefined && body.buildingSharePercent !== "" && !isNaN(parseFloat(body.buildingSharePercent)) ? parseFloat(body.buildingSharePercent) : 80,
         hausgeld: parseOptFloat(body.hausgeld),
-        hausgeldDetails: body.hausgeldDetails !== undefined ? (typeof body.hausgeldDetails === "string" ? body.hausgeldDetails : JSON.stringify(body.hausgeldDetails)) : null,
-        unitDetails: body.unitDetails !== undefined ? (typeof body.unitDetails === "string" ? body.unitDetails : JSON.stringify(body.unitDetails)) : null,
+        hausgeldDetails: body.hausgeldDetails !== undefined ? (body.hausgeldDetails === null || body.hausgeldDetails === "null" || body.hausgeldDetails === "" ? null : typeof body.hausgeldDetails === "string" ? body.hausgeldDetails : JSON.stringify(body.hausgeldDetails)) : null,
+        unitDetails: body.unitDetails !== undefined ? (body.unitDetails === null || body.unitDetails === "null" || body.unitDetails === "" ? null : typeof body.unitDetails === "string" ? body.unitDetails : JSON.stringify(body.unitDetails)) : null,
         nonRecoverableCosts: parseOptFloat(body.nonRecoverableCosts),
         maintenanceReserve: parseOptFloat(body.maintenanceReserve),
-        latitude: parseOptFloat(body.latitude),
-        longitude: parseOptFloat(body.longitude),
         ...(tenantInput ? { tenants: { create: [tenantInput] } } : {}),
       },
       include: {
@@ -124,8 +129,9 @@ export async function POST(request: Request) {
       },
     });
 
-    const activeTenant = property.tenants?.find((t) => t.isCurrent) || null;
-    const formerTenants = property.tenants?.filter((t) => !t.isCurrent) || [];
+    const propWithTenants = property as any;
+    const activeTenant = propWithTenants.tenants?.find((t: any) => t.isCurrent) || null;
+    const formerTenants = propWithTenants.tenants?.filter((t: any) => !t.isCurrent) || [];
 
     return NextResponse.json({ ...property, tenant: activeTenant, formerTenants }, { status: 201 });
   } catch (error: any) {

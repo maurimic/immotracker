@@ -39,10 +39,6 @@ model Property {
   hausgeldDetails     String?  // JSON für Einheiten-Aufteilung bei Mehrfach-WEs (z.B. {"WE5": 250, "WE6": 340})
   unitDetails         String?  // JSON für Verbundwohnungen: Details der Untereinheiten (Kaufpreis, Notardatum, m², Kaltmiete, NK, Hausgeld)
   nonRecoverableCosts Float?   // Nicht-umlagefähige Betriebskosten monatlich in € (Verwaltung, SEV)
-
-  // Geodaten für interaktive Karte
-  latitude            Float?
-  longitude           Float?
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

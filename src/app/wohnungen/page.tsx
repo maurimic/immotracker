@@ -487,6 +487,19 @@ function DetailedAncillaryCostsSection({
   );
 }
 
+// ─── JSON Safe Parser Helper ─────────────────────────────────────────────────
+function parseJsonSafe<T = any>(val: any): T | null {
+  if (!val || val === "null" || val === "undefined") return null;
+  if (typeof val === "object") return val as T;
+  try {
+    const parsed = typeof val === "string" ? JSON.parse(val) : val;
+    if (!parsed || parsed === "null" || parsed === "undefined") return null;
+    return typeof parsed === "object" ? (parsed as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Wohnung bearbeiten Dialog ────────────────────────────────────────────────
 function EditPropertyDialog({
   property,
@@ -499,23 +512,16 @@ function EditPropertyDialog({
   const [saving, setSaving] = useState(false);
 
   const initialUnitDetails: Record<string, string> = {};
-  if (property.hausgeldDetails) {
-    try {
-      const parsed = typeof property.hausgeldDetails === "string" ? JSON.parse(property.hausgeldDetails) : property.hausgeldDetails;
-      for (const [k, v] of Object.entries(parsed)) {
-        const num = typeof v === "number" ? v : (v as any)?.hausgeld != null ? (v as any).hausgeld : null;
-        if (num != null) initialUnitDetails[k] = formatGermanInput(num);
-      }
-    } catch {}
+  const parsedHausgeld = parseJsonSafe<Record<string, any>>(property.hausgeldDetails);
+  if (parsedHausgeld) {
+    for (const [k, v] of Object.entries(parsedHausgeld)) {
+      const num = typeof v === "number" ? v : (v as any)?.hausgeld != null ? (v as any).hausgeld : null;
+      if (num != null) initialUnitDetails[k] = formatGermanInput(num);
+    }
   }
   const [unitDetails, setUnitDetails] = useState<Record<string, string>>(initialUnitDetails);
 
-  let initialSubUnits: Record<string, SubUnitDetail> = {};
-  if (property.unitDetails) {
-    try {
-      initialSubUnits = typeof property.unitDetails === "string" ? JSON.parse(property.unitDetails) : property.unitDetails;
-    } catch {}
-  }
+  const initialSubUnits: Record<string, SubUnitDetail> = parseJsonSafe<Record<string, SubUnitDetail>>(property.unitDetails) || {};
   const [subUnits, setSubUnits] = useState<Record<string, SubUnitDetail>>(initialSubUnits);
   const [expandedSubUnitCosts, setExpandedSubUnitCosts] = useState<Record<string, boolean>>({});
 
@@ -921,7 +927,7 @@ function EditPropertyDialog({
             </div>
 
             {/* Mehrere Wohneinheiten (z.B. WE 5 und WE 6)? Untergliederung für Verbundwohnung */}
-            {Object.keys(subUnits).length > 0 ? (
+            {subUnits && Object.keys(subUnits).length > 0 ? (
               <div className="p-3 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
@@ -2536,12 +2542,12 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
         </div>
 
         {/* Verbund-Aufteilung nach Wohneinheiten (z.B. WE 5 & WE 6) */}
-        {property.unitDetails && (() => {
-          try {
-            const details: Record<string, SubUnitDetail> = typeof property.unitDetails === "string" ? JSON.parse(property.unitDetails) : property.unitDetails;
-            const units = Object.values(details);
-            if (units.length > 1) {
-              return (
+        {(() => {
+          const details = parseJsonSafe<Record<string, SubUnitDetail>>(property.unitDetails);
+          if (!details) return null;
+          const units = Object.values(details);
+          if (units.length > 1) {
+            return (
                 <div className="rounded-xl border border-indigo-200/70 dark:border-indigo-800/70 bg-indigo-50/40 dark:bg-indigo-950/20 p-2.5 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
@@ -2613,7 +2619,6 @@ function PropertyCard({ property, onRefresh }: { property: Property; onRefresh: 
                 </div>
               );
             }
-          } catch {}
           return null;
         })()}
 
@@ -3733,12 +3738,10 @@ function PortfolioKaufwertInfoDialog({
                     const yld = price > 0 && cold > 0 ? formatGermanPercent((cold * 12 / price) * 100, 2) : null;
 
                     let subUnitsList: any[] = [];
-                    if (p.unitDetails) {
-                      try {
-                        const parsed = typeof p.unitDetails === "string" ? JSON.parse(p.unitDetails) : p.unitDetails;
-                        const values = Object.values(parsed) as any[];
-                        if (values.length > 1) subUnitsList = values;
-                      } catch {}
+                    const parsedUnits = parseJsonSafe<Record<string, any>>(p.unitDetails);
+                    if (parsedUnits) {
+                      const values = Object.values(parsedUnits);
+                      if (values.length > 1) subUnitsList = values;
                     }
 
                     return (
