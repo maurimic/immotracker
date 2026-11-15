@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import {
   Building2, MapPin, Maximize2, Minimize2, ZoomIn, ZoomOut,
-  Navigation, Euro, User, ArrowUpRight, Layers, Eye, CheckCircle
+  Navigation, Euro, ArrowUpRight, Layers, CheckCircle, ExternalLink
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { getCoordinatesForProperty } from "@/lib/geocoding";
-import "leaflet/dist/leaflet.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 // Interface für Immobilien auf der Karte
 export interface MapProperty {
@@ -39,9 +39,31 @@ export interface MapProperty {
 interface BuildingCluster {
   address: string;
   city: string;
-  coords: [number, number];
+  coords: [number, number]; // [lat, lng]
   properties: MapProperty[];
 }
+
+// OpenFreeMap Vektor-Styles (100% kostenlos, ohne API-Key)
+const OPENFREEMAP_STYLES = {
+  liberty: {
+    name: "Liberty (Standard)",
+    url: "https://tiles.openfreemap.org/styles/liberty",
+  },
+  positron: {
+    name: "Positron (Hell & Minimal)",
+    url: "https://tiles.openfreemap.org/styles/positron",
+  },
+  bright: {
+    name: "Bright (Kontrast)",
+    url: "https://tiles.openfreemap.org/styles/bright",
+  },
+  dark: {
+    name: "Dark Mode",
+    url: "https://tiles.openfreemap.org/styles/dark",
+  },
+} as const;
+
+type MapStyleKey = keyof typeof OPENFREEMAP_STYLES;
 
 export default function InteractivePropertyMap({
   properties,
@@ -52,20 +74,25 @@ export default function InteractivePropertyMap({
 }) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
-  const { theme } = useTheme();
+  const markersRef = useRef<Array<{ marker: any; popup: any; cluster: BuildingCluster }>>([]);
+  const { theme, resolvedTheme } = useTheme();
 
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
+  const [selectedStyle, setSelectedStyle] = useState<MapStyleKey | "auto">("auto");
   const [fullscreen, setFullscreen] = useState(false);
+
+  // Bestimme den aktiven Style anhand Theme oder Benutzerwahl
+  const isDark = (resolvedTheme || theme) === "dark";
+  const activeStyleKey: MapStyleKey =
+    selectedStyle === "auto" ? (isDark ? "dark" : "liberty") : selectedStyle;
+  const activeStyleUrl = OPENFREEMAP_STYLES[activeStyleKey].url;
 
   // Gebäude clustern (z.B. Siemensstraße 28 EG + 2.OG an derselben Adresse)
   const buildingClusters: BuildingCluster[] = [];
   const addressMap = new Map<string, MapProperty[]>();
 
   for (const p of properties) {
-    // Normalisiere Adresse (ohne Etage/Zusatz)
     const normalized = p.address
       .replace(/(\b(eg|1\.og|2\.og|3\.og|dg|erdgeschoss|obergeschoss)\b)/gi, "")
       .replace(/\s+/g, " ")
@@ -77,11 +104,8 @@ export default function InteractivePropertyMap({
   }
 
   addressMap.forEach((props, normAddr) => {
-    // Erste Property für Koordinaten heranziehen
     const rep = props[0];
     const coords = getCoordinatesForProperty(rep.address, rep.latitude, rep.longitude);
-    
-    // Stadt extrahieren
     const cityMatch = normAddr.match(/\d{5}\s+([A-Za-zäöüÄÖÜß]+)/);
     const city = cityMatch ? cityMatch[1] : "NRW";
 
@@ -93,126 +117,198 @@ export default function InteractivePropertyMap({
     });
   });
 
-  // Leaflet-Initialisierung
+  // MapLibre GL initialisieren
   useEffect(() => {
     let isMounted = true;
+    let map: any = null;
 
     async function initMap() {
-      if (!mapContainerRef.current || mapInstanceRef.current) return;
+      if (!mapContainerRef.current) return;
 
-      const L = (await import("leaflet")).default;
+      const maplibregl = await import("maplibre-gl");
 
-      // Leaflet Default Icon Bug fix
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
+      // Wenn bereits eine Instanz existiert, entfernen
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markersRef.current = [];
+      }
 
-      // Startkoordinaten (Zentrum Ruhrgebiet)
-      const centerCoords: [number, number] = [51.48, 7.30];
+      // Initiales Zentrum Ruhrgebiet (Lng, Lat!)
+      const defaultCenter: [number, number] = [7.30, 51.48];
 
-      const map = L.map(mapContainerRef.current, {
-        center: centerCoords,
-        zoom: 11,
-        zoomControl: false, // Eigene Zoom-Buttons
+      map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: activeStyleUrl,
+        center: defaultCenter,
+        zoom: 10.5,
+        attributionControl: false, // Eigene Attribution mit OpenFreeMap & OSM
       });
 
       mapInstanceRef.current = map;
 
-      // Tile Layer hinzufügen
-      const isDark = theme === "dark";
-      const tileUrl = isDark
-        ? "https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png"
-        : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+      // Attribution Control hinzufügen (OpenFreeMap & OpenStreetMap)
+      const attribution = new maplibregl.AttributionControl({
+        customAttribution:
+          '<a href="https://openfreemap.org" target="_blank" rel="noopener noreferrer" class="font-medium hover:underline">OpenFreeMap</a> &bull; <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer" class="hover:underline">&copy; OpenMapTiles</a> &bull; Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" class="hover:underline">OpenStreetMap</a>',
+        compact: true,
+      });
+      map.addControl(attribution, "bottom-left");
 
-      L.tileLayer(tileUrl, {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxZoom: 19,
-      }).addTo(map);
+      map.on("load", () => {
+        if (!isMounted) return;
 
-      // Marker für jedes Gebäude erstellen
-      const allBounds: [number, number][] = [];
+        // Bounds für alle Cluster berechnen (LngLatBounds erwartet [lng, lat])
+        const bounds = new maplibregl.LngLatBounds();
+        let hasBounds = false;
 
-      buildingClusters.forEach((cluster) => {
-        allBounds.push(cluster.coords);
-        const unitCount = cluster.properties.length;
-        const totalColdRent = cluster.properties.reduce((s, p) => s + (p.tenant?.coldRent || 0), 0);
+        buildingClusters.forEach((cluster) => {
+          const lngLat: [number, number] = [cluster.coords[1], cluster.coords[0]];
+          bounds.extend(lngLat);
+          hasBounds = true;
 
-        // Benutzerdefiniertes HTML-Icon (Tailwind-gestylt)
-        const customIcon = L.divIcon({
-          className: "custom-property-pin",
-          html: `
-            <div class="relative group cursor-pointer">
-              <div class="flex items-center gap-1.5 bg-primary text-primary-foreground font-semibold px-2.5 py-1 rounded-full shadow-lg border-2 border-background transform hover:scale-110 transition-transform duration-200">
-                <span class="text-xs">🏢</span>
-                <span class="text-xs font-bold font-mono">${formatCurrency(totalColdRent)}</span>
-                ${unitCount > 1 ? `<span class="bg-amber-400 text-amber-950 text-[10px] px-1 rounded-full font-black">${unitCount}</span>` : ""}
+          const unitCount = cluster.properties.length;
+          const totalColdRent = cluster.properties.reduce((s, p) => s + (p.tenant?.coldRent || 0), 0);
+
+          // Benutzerdefiniertes HTML-Element für Marker
+          const markerEl = document.createElement("div");
+          markerEl.className = "custom-property-pin cursor-pointer group";
+          markerEl.innerHTML = `
+            <div style="position: relative; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.25)); transition: transform 0.2s ease;">
+              <div style="
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                background-color: #2563eb;
+                color: #ffffff;
+                font-family: inherit;
+                font-size: 12px;
+                font-weight: 700;
+                padding: 4px 10px;
+                border-radius: 9999px;
+                border: 2px solid #ffffff;
+                white-space: nowrap;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+              ">
+                <span style="font-size: 13px;">🏢</span>
+                <span style="font-family: monospace;">${formatCurrency(totalColdRent)}</span>
+                ${
+                  unitCount > 1
+                    ? `<span style="background-color: #fbbf24; color: #451a03; font-size: 10px; padding: 1px 6px; border-radius: 9999px; font-weight: 900; margin-left: 2px;">${unitCount}</span>`
+                    : ""
+                }
               </div>
-              <div class="w-2.5 h-2.5 bg-primary rotate-45 mx-auto -mt-1 border-r-2 border-b-2 border-background"></div>
+              <div style="
+                width: 10px;
+                height: 10px;
+                background-color: #2563eb;
+                transform: rotate(45deg);
+                margin-top: -5px;
+                border-right: 2px solid #ffffff;
+                border-bottom: 2px solid #ffffff;
+              "></div>
             </div>
-          `,
-          iconSize: [110, 36],
-          iconAnchor: [55, 36],
-          popupAnchor: [0, -36],
-        });
+          `;
 
-        // Popup-HTML mit Wohnungsdetails
-        const unitsHtml = cluster.properties.map((p) => {
-          const tenant = p.tenant ? `${p.tenant.firstName} ${p.tenant.lastName}` : "Leerstand";
-          const warmRent = (p.tenant?.coldRent || 0) + (p.tenant?.utilities || 0);
-          const unitBadge = p.unitNumber || p.floor || "WE";
+          // Hover-Effekt
+          markerEl.addEventListener("mouseenter", () => {
+            const inner = markerEl.firstElementChild as HTMLElement;
+            if (inner) inner.style.transform = "scale(1.12)";
+          });
+          markerEl.addEventListener("mouseleave", () => {
+            const inner = markerEl.firstElementChild as HTMLElement;
+            if (inner) inner.style.transform = "scale(1)";
+          });
 
-          return `
-            <div class="p-2.5 border rounded-md bg-muted/30 mb-2 last:mb-0 text-xs">
-              <div class="flex justify-between items-center mb-1">
-                <strong class="text-sm font-semibold text-foreground">${p.name}</strong>
-                <span class="bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded text-[10px] font-mono">${unitBadge}</span>
+          // Popup HTML generieren
+          const unitsHtml = cluster.properties
+            .map((p) => {
+              const tenant = p.tenant ? `${p.tenant.firstName} ${p.tenant.lastName}` : "Leerstand";
+              const warmRent = (p.tenant?.coldRent || 0) + (p.tenant?.utilities || 0);
+              const unitBadge = p.unitNumber || p.floor || "WE";
+
+              return `
+                <div style="
+                  padding: 8px 10px;
+                  border: 1px solid rgba(148, 163, 184, 0.25);
+                  border-radius: 6px;
+                  background: rgba(148, 163, 184, 0.08);
+                  margin-bottom: 6px;
+                  font-size: 12px;
+                ">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <strong style="font-size: 12px; font-weight: 600;">${p.name}</strong>
+                    <span style="
+                      background: rgba(148, 163, 184, 0.2);
+                      padding: 1px 6px;
+                      border-radius: 4px;
+                      font-size: 10px;
+                      font-family: monospace;
+                    ">${unitBadge}</span>
+                  </div>
+                  <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">
+                    👤 Mieter: <strong style="color: inherit;">${tenant}</strong> · 📐 ${p.sqm} m²
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 11px; border-top: 1px dashed rgba(148, 163, 184, 0.2); padding-top: 4px;">
+                    <span style="color: #64748b;">Kaltmiete:</span>
+                    <strong style="font-family: monospace;">${formatCurrency(p.tenant?.coldRent || 0)}</strong>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px;">
+                    <span style="color: #64748b;">Warmmiete:</span>
+                    <strong style="font-family: monospace; color: #2563eb;">${formatCurrency(warmRent)}</strong>
+                  </div>
+                </div>
+              `;
+            })
+            .join("");
+
+          const popupContent = `
+            <div style="font-family: inherit; min-width: 260px; max-width: 310px; padding: 4px;">
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px; color: #1e293b;">📍 ${cluster.address}</div>
+              <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">
+                Stadt: ${cluster.city} · ${unitCount} ${unitCount > 1 ? "Wohneinheiten" : "Wohneinheit"}
               </div>
-              <div class="text-muted-foreground text-[11px] mb-1.5">
-                👤 Mieter: <span class="font-medium text-foreground">${tenant}</span> · 📐 ${p.sqm} m²
-              </div>
-              <div class="flex justify-between items-center pt-1 border-t border-border/50 text-[11px]">
-                <span class="text-muted-foreground">Kaltmiete:</span>
-                <strong class="font-mono">${formatCurrency(p.tenant?.coldRent || 0)}</strong>
-              </div>
-              <div class="flex justify-between items-center text-[11px]">
-                <span class="text-muted-foreground">Warmmiete:</span>
-                <strong class="font-mono text-primary">${formatCurrency(warmRent)}</strong>
+              <div style="max-height: 260px; overflow-y: auto; padding-right: 2px;">
+                ${unitsHtml}
               </div>
             </div>
           `;
-        }).join("");
 
-        const popupContent = `
-          <div style="font-family: inherit; min-width: 260px; max-width: 300px; padding: 2px;">
-            <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px;">📍 ${cluster.address}</div>
-            <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">Stadt: ${cluster.city} · ${unitCount} ${unitCount > 1 ? "Einheiten" : "Einheit"}</div>
-            ${unitsHtml}
-          </div>
-        `;
+          const popup = new maplibregl.Popup({
+            offset: 24,
+            closeButton: true,
+            closeOnClick: false,
+            maxWidth: "340px",
+          }).setHTML(popupContent);
 
-        const marker = L.marker(cluster.coords, { icon: customIcon }).addTo(map);
-        marker.bindPopup(popupContent, { maxWidth: 320 });
+          const marker = new maplibregl.Marker({
+            element: markerEl,
+            anchor: "bottom",
+          })
+            .setLngLat(lngLat)
+            .setPopup(popup)
+            .addTo(map);
 
-        marker.on("click", () => {
-          if (cluster.properties[0]) {
-            setSelectedPropertyId(cluster.properties[0].id);
-          }
+          markerEl.addEventListener("click", () => {
+            if (cluster.properties[0]) {
+              setSelectedPropertyId(cluster.properties[0].id);
+            }
+          });
+
+          markersRef.current.push({ marker, popup, cluster });
         });
 
-        markersRef.current.push(marker);
-      });
+        // Fit Bounds
+        if (hasBounds) {
+          map.fitBounds(bounds, {
+            padding: { top: 60, bottom: 60, left: 60, right: 60 },
+            maxZoom: 13.5,
+            duration: 800,
+          });
+        }
 
-      // Karte auf alle Marker ausrichten
-      if (allBounds.length > 0) {
-        map.fitBounds(allBounds, { padding: [50, 50], maxZoom: 14 });
-      }
-
-      if (isMounted) {
         setMapReady(true);
-      }
+      });
     }
 
     initMap();
@@ -222,24 +318,47 @@ export default function InteractivePropertyMap({
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        markersRef.current = [];
       }
     };
-  }, [theme]);
+  }, [activeStyleUrl]);
+
+  // Vollbild resize handling
+  useEffect(() => {
+    if (mapInstanceRef.current) {
+      setTimeout(() => {
+        mapInstanceRef.current.resize();
+      }, 150);
+    }
+  }, [fullscreen]);
 
   // Bei Klick auf eine Immobilie in der Liste -> Karte dorthin fliegen
   const handleFlyToProperty = (property: MapProperty) => {
     setSelectedPropertyId(property.id);
     const coords = getCoordinatesForProperty(property.address, property.latitude, property.longitude);
+    const lngLat: [number, number] = [coords[1], coords[0]];
+
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo(coords, 16, { duration: 1.2 });
-      
-      // Passenden Marker öffnen
-      const targetMarker = markersRef.current.find((m) => {
-        const mPos = m.getLatLng();
-        return Math.abs(mPos.lat - coords[0]) < 0.001 && Math.abs(mPos.lng - coords[1]) < 0.001;
+      mapInstanceRef.current.flyTo({
+        center: lngLat,
+        zoom: 16,
+        duration: 1200,
+        essential: true,
       });
-      if (targetMarker) {
-        targetMarker.openPopup();
+
+      // Passenden Marker öffnen
+      const found = markersRef.current.find((item) => {
+        const mPos = item.marker.getLngLat();
+        return (
+          Math.abs(mPos.lng - lngLat[0]) < 0.001 &&
+          Math.abs(mPos.lat - lngLat[1]) < 0.001
+        );
+      });
+
+      if (found) {
+        // Schließe andere Popups und öffne dieses
+        markersRef.current.forEach((m) => m.popup.remove());
+        found.popup.addTo(mapInstanceRef.current);
       }
     }
   };
@@ -247,10 +366,18 @@ export default function InteractivePropertyMap({
   // Zoom-Buttons
   const handleZoomIn = () => mapInstanceRef.current?.zoomIn();
   const handleZoomOut = () => mapInstanceRef.current?.zoomOut();
-  const handleResetView = () => {
+  const handleResetView = async () => {
     if (mapInstanceRef.current && buildingClusters.length > 0) {
-      const allBounds = buildingClusters.map((c) => c.coords);
-      mapInstanceRef.current.fitBounds(allBounds, { padding: [50, 50], maxZoom: 14 });
+      const maplibregl = await import("maplibre-gl");
+      const bounds = new maplibregl.LngLatBounds();
+      buildingClusters.forEach((c) => {
+        bounds.extend([c.coords[1], c.coords[0]]);
+      });
+      mapInstanceRef.current.fitBounds(bounds, {
+        padding: { top: 60, bottom: 60, left: 60, right: 60 },
+        maxZoom: 13.5,
+        duration: 800,
+      });
     }
   };
 
@@ -294,7 +421,24 @@ export default function InteractivePropertyMap({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 self-end sm:self-auto">
+        <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
+          {/* Style Selector */}
+          <div className="flex items-center gap-1 bg-muted/50 rounded-md p-0.5 border text-xs">
+            <Layers className="h-3.5 w-3.5 text-muted-foreground ml-1.5" />
+            <select
+              value={selectedStyle}
+              onChange={(e) => setSelectedStyle(e.target.value as any)}
+              className="bg-transparent border-0 text-xs py-1 px-1.5 font-medium text-foreground focus:ring-0 cursor-pointer outline-none"
+              title="Kartenstil auswählen (OpenFreeMap)"
+            >
+              <option value="auto">Auto ({isDark ? "Dark" : "Liberty"})</option>
+              <option value="liberty">Liberty (Farbe)</option>
+              <option value="positron">Positron (Hell/Minimal)</option>
+              <option value="bright">Bright</option>
+              <option value="dark">Dark</option>
+            </select>
+          </div>
+
           <Button
             size="sm"
             variant="outline"
@@ -345,19 +489,21 @@ export default function InteractivePropertyMap({
 
           {/* Fallback Ladeanzeige */}
           {!mapReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-xs z-20 text-xs text-muted-foreground">
-              <Building2 className="h-6 w-6 animate-pulse text-primary mb-2" />
-              <span>Interaktive Portfolio-Karte wird geladen...</span>
+            <div className="absolute inset-0 flex items-center justify-center bg-muted/60 backdrop-blur-xs z-20 text-xs text-muted-foreground flex-col gap-2">
+              <Building2 className="h-6 w-6 animate-pulse text-primary" />
+              <span>Interaktive Portfolio-Karte wird geladen (OpenFreeMap)...</span>
             </div>
           )}
 
-          {/* Legende unten rechts */}
-          <div className="absolute bottom-3 right-3 z-[400] bg-background/90 backdrop-blur-sm border rounded-md px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-md flex items-center gap-2">
+          {/* Legende & OpenFreeMap Badge unten rechts */}
+          <div className="absolute bottom-3 right-3 z-[30] bg-background/95 backdrop-blur-sm border rounded-md px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-md flex items-center gap-2">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Kaltmiete / Monat</span>
+            <span>Kaltmiete / Mon.</span>
             <span className="text-border">|</span>
             <span className="bg-amber-400 text-amber-950 text-[10px] font-black px-1 rounded-full">N</span>
             <span>Mehrere WEs</span>
+            <span className="text-border">|</span>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">100% Free OpenFreeMap</span>
           </div>
         </div>
 
@@ -370,7 +516,6 @@ export default function InteractivePropertyMap({
           {buildingClusters.map((cluster) => {
             const isSelected = cluster.properties.some((p) => p.id === selectedPropertyId);
             const clusterColdRent = cluster.properties.reduce((s, p) => s + (p.tenant?.coldRent || 0), 0);
-            const clusterSqm = cluster.properties.reduce((s, p) => s + (p.sqm || 0), 0);
 
             return (
               <Card

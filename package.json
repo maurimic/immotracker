@@ -41,6 +41,7 @@
     "googleapis": "^144.0.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.460.0",
+    "maplibre-gl": "^5.24.1",
     "next": "^14.2.18",
     "next-themes": "^0.3.0",
     "pdf-parse": "^2.4.5",
