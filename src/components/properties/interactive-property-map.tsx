@@ -9,6 +9,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import { getCoordinatesForProperty } from "@/lib/geocoding";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -425,22 +432,36 @@ export default function InteractivePropertyMap({
         </div>
 
         <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
-          {/* Style Selector */}
-          <div className="flex items-center gap-1 bg-muted/50 rounded-md p-0.5 border text-xs">
-            <Layers className="h-3.5 w-3.5 text-muted-foreground ml-1.5" />
-            <select
-              value={selectedStyle}
-              onChange={(e) => setSelectedStyle(e.target.value as any)}
-              className="bg-transparent border-0 text-xs py-1 px-1.5 font-medium text-foreground focus:ring-0 cursor-pointer outline-none"
+          {/* Style Selector mit Radix UI für perfekten Dark/Light-Mode */}
+          <Select
+            value={selectedStyle}
+            onValueChange={(val) => setSelectedStyle(val as any)}
+          >
+            <SelectTrigger
+              className="h-8 text-xs bg-muted/50 border gap-1.5 px-2.5 w-[140px] font-medium"
               title="Kartenstil auswählen (OpenFreeMap)"
             >
-              <option value="auto">Auto ({isDark ? "Dark" : "Liberty"})</option>
-              <option value="liberty">Liberty (Farbe)</option>
-              <option value="positron">Positron (Hell/Minimal)</option>
-              <option value="bright">Bright</option>
-              <option value="dark">Dark</option>
-            </select>
-          </div>
+              <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <SelectValue placeholder="Kartenstil" />
+            </SelectTrigger>
+            <SelectContent align="end" className="text-xs">
+              <SelectItem value="auto" className="cursor-pointer">
+                Auto ({isDark ? "Dark" : "Liberty"})
+              </SelectItem>
+              <SelectItem value="liberty" className="cursor-pointer">
+                Liberty (Farbe)
+              </SelectItem>
+              <SelectItem value="positron" className="cursor-pointer">
+                Positron (Hell/Minimal)
+              </SelectItem>
+              <SelectItem value="bright" className="cursor-pointer">
+                Bright
+              </SelectItem>
+              <SelectItem value="dark" className="cursor-pointer">
+                Dark Mode
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
           <Button
             size="sm"
