@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Building2,
+  MapPin,
   CreditCard,
   Landmark,
   Wrench,
@@ -29,6 +30,7 @@ import { Button } from "@/components/ui/button";
 const navItems = [
   { href: "/", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/wohnungen", icon: Building2, label: "Wohnungen" },
+  { href: "/karte", icon: MapPin, label: "Portfolio-Karte" },
   { href: "/zahlungen", icon: CreditCard, label: "Zahlungen" },
   { href: "/kredite", icon: Landmark, label: "Kredite & Tilgung" },
   { href: "/instandhaltung", icon: Wrench, label: "Instandhaltung" },

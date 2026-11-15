@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, Fragment } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Building2, Plus, Users, Euro, FileText, ChevronRight,
   Phone, Mail, Calendar, CreditCard, Edit, Trash2, X, TrendingUp,
   AlertCircle, ShieldCheck, Clock, Calculator, Upload, Check,
   UserPlus, UserMinus, AlertTriangle, Home, Coins, Percent, ArrowUpRight, ArrowRight, Info,
-  Hammer, ShieldAlert, ChevronDown, ChevronUp, Receipt, History, Archive, Layers
+  Hammer, ShieldAlert, ChevronDown, ChevronUp, Receipt, History, Archive, Layers, MapPin, Map
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,19 @@ import { toast } from "@/hooks/use-toast";
 import { RentAdjustmentDialog } from "@/components/RentAdjustmentDialog";
 import { PropertyInvestmentsDialog, PropertyInvestment } from "@/components/PropertyInvestmentsDialog";
 import { parseUnitTokens } from "@/lib/property-matching";
+
+const InteractivePropertyMap = dynamic(
+  () => import("@/components/properties/interactive-property-map"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[500px] w-full rounded-lg border border-dashed flex flex-col items-center justify-center bg-muted/20 text-muted-foreground gap-3">
+        <Building2 className="h-8 w-8 animate-pulse text-primary" />
+        <span className="text-sm font-medium">Interaktive Karte wird geladen...</span>
+      </div>
+    ),
+  }
+);
 
 export interface SubUnitDetail {
   key: string;
@@ -3983,6 +3997,9 @@ export default function WohnungenPage() {
           <TabsTrigger value="akten" className="gap-1.5">
             <Building2 className="h-4 w-4" /> Wohnungs- & Mieterakten ({properties.length})
           </TabsTrigger>
+          <TabsTrigger value="karte" className="gap-1.5">
+            <MapPin className="h-4 w-4 text-primary" /> Portfolio-Karte
+          </TabsTrigger>
           <TabsTrigger value="anpassungen" className="gap-1.5">
             <TrendingUp className="h-4 w-4" /> Mietanpassungen & Fristenrechner ({allAdjustments.length})
           </TabsTrigger>
@@ -4020,6 +4037,11 @@ export default function WohnungenPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Interaktive Portfolio-Karte Tab */}
+        <TabsContent value="karte" className="mt-4">
+          <InteractivePropertyMap properties={properties} />
         </TabsContent>
 
         {/* Mietanpassungen & Fristenrechner Tab */}

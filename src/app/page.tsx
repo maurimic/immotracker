@@ -25,6 +25,7 @@ import {
   ReceiptText,
   CreditCard,
   ArrowRight,
+  MapPin,
 } from "lucide-react";
 import {
   Tooltip,
@@ -228,7 +229,14 @@ export default function DashboardPage() {
             Übersicht · {new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Button variant="outline" size="sm" asChild className="gap-1.5 h-8 text-xs shadow-xs">
+            <Link href="/karte">
+              <MapPin className="h-3.5 w-3.5 text-primary" />
+              <span className="hidden sm:inline">Portfolio-Karte</span>
+              <span className="sm:hidden">Karte</span>
+            </Link>
+          </Button>
           {totalWarnings > 0 && (
             <Dialog open={warningsOpen} onOpenChange={setWarningsOpen}>
               <DialogTrigger asChild>

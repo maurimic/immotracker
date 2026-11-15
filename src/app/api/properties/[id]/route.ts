@@ -86,6 +86,8 @@ export async function PUT(
         unitDetails: body.unitDetails !== undefined ? (typeof body.unitDetails === "string" ? body.unitDetails : JSON.stringify(body.unitDetails)) : undefined,
         nonRecoverableCosts: body.nonRecoverableCosts !== undefined ? parseOptFloat(body.nonRecoverableCosts) : undefined,
         maintenanceReserve: body.maintenanceReserve !== undefined ? parseOptFloat(body.maintenanceReserve) : undefined,
+        latitude: body.latitude !== undefined ? parseOptFloat(body.latitude) : undefined,
+        longitude: body.longitude !== undefined ? parseOptFloat(body.longitude) : undefined,
       },
       include: {
         tenants: {

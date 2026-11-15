@@ -110,6 +110,8 @@ export async function POST(request: Request) {
         unitDetails: body.unitDetails !== undefined ? (typeof body.unitDetails === "string" ? body.unitDetails : JSON.stringify(body.unitDetails)) : null,
         nonRecoverableCosts: parseOptFloat(body.nonRecoverableCosts),
         maintenanceReserve: parseOptFloat(body.maintenanceReserve),
+        latitude: parseOptFloat(body.latitude),
+        longitude: parseOptFloat(body.longitude),
         ...(tenantInput ? { tenants: { create: [tenantInput] } } : {}),
       },
       include: {
