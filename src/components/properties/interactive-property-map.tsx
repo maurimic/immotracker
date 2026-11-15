@@ -9,13 +9,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import { getCoordinatesForProperty } from "@/lib/geocoding";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -51,26 +44,9 @@ interface BuildingCluster {
 }
 
 // OpenFreeMap Vektor-Styles (100% kostenlos, ohne API-Key)
-const OPENFREEMAP_STYLES = {
-  liberty: {
-    name: "Liberty (Standard)",
-    url: "https://tiles.openfreemap.org/styles/liberty",
-  },
-  positron: {
-    name: "Positron (Hell & Minimal)",
-    url: "https://tiles.openfreemap.org/styles/positron",
-  },
-  bright: {
-    name: "Bright (Kontrast)",
-    url: "https://tiles.openfreemap.org/styles/bright",
-  },
-  dark: {
-    name: "Dark Mode",
-    url: "https://tiles.openfreemap.org/styles/dark",
-  },
-} as const;
-
-type MapStyleKey = keyof typeof OPENFREEMAP_STYLES;
+// Automatisch: Liberty bei Tag/Hell, Dark Mode bei Nacht/Dunkel
+const OPENFREEMAP_STYLE_LIGHT = "https://tiles.openfreemap.org/styles/liberty";
+const OPENFREEMAP_STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
 
 export default function InteractivePropertyMap({
   properties,
@@ -86,14 +62,11 @@ export default function InteractivePropertyMap({
 
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState<MapStyleKey | "auto">("auto");
   const [fullscreen, setFullscreen] = useState(false);
 
-  // Bestimme den aktiven Style anhand Theme oder Benutzerwahl
+  // Automatische Stilauswahl: Hell = Liberty, Dunkel = Dark Mode
   const isDark = (resolvedTheme || theme) === "dark";
-  const activeStyleKey: MapStyleKey =
-    selectedStyle === "auto" ? (isDark ? "dark" : "liberty") : selectedStyle;
-  const activeStyleUrl = OPENFREEMAP_STYLES[activeStyleKey].url;
+  const activeStyleUrl = isDark ? OPENFREEMAP_STYLE_DARK : OPENFREEMAP_STYLE_LIGHT;
 
   // Gebäude clustern (z.B. Siemensstraße 28 EG + 2.OG an derselben Adresse)
   const buildingClusters: BuildingCluster[] = [];
@@ -432,37 +405,6 @@ export default function InteractivePropertyMap({
         </div>
 
         <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
-          {/* Style Selector mit Radix UI für perfekten Dark/Light-Mode */}
-          <Select
-            value={selectedStyle}
-            onValueChange={(val) => setSelectedStyle(val as any)}
-          >
-            <SelectTrigger
-              className="h-8 text-xs bg-muted/50 border gap-1.5 px-2.5 w-[140px] font-medium"
-              title="Kartenstil auswählen (OpenFreeMap)"
-            >
-              <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <SelectValue placeholder="Kartenstil" />
-            </SelectTrigger>
-            <SelectContent align="end" className="text-xs">
-              <SelectItem value="auto" className="cursor-pointer">
-                Auto ({isDark ? "Dark" : "Liberty"})
-              </SelectItem>
-              <SelectItem value="liberty" className="cursor-pointer">
-                Liberty (Farbe)
-              </SelectItem>
-              <SelectItem value="positron" className="cursor-pointer">
-                Positron (Hell/Minimal)
-              </SelectItem>
-              <SelectItem value="bright" className="cursor-pointer">
-                Bright
-              </SelectItem>
-              <SelectItem value="dark" className="cursor-pointer">
-                Dark Mode
-              </SelectItem>
-            </SelectContent>
-          </Select>
-
           <Button
             size="sm"
             variant="outline"
