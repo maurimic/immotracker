@@ -13,10 +13,18 @@ jobs:
       - name: Deploy Immotracker on Server
         run: |
           echo "Starting automated deployment on $(hostname)..."
-          cd /opt/immotracker
+          if [ -d "$HOME/immotracker" ]; then
+            cd "$HOME/immotracker"
+          elif [ -d "/opt/immotracker" ]; then
+            cd "/opt/immotracker"
+          else
+            echo "Immotracker directory not found!"
+            exit 1
+          fi
           
           echo "Pulling latest changes from GitHub..."
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
           
           echo "Building updated Docker images in background..."
           docker compose build
