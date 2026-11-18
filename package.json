@@ -11,6 +11,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "node scripts/seed.js",
+    "db:ensure-schema": "node scripts/ensure-schema.js",
     "db:import": "node scripts/import-local.js",
     "db:studio": "prisma studio"
   },

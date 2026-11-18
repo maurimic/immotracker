@@ -24,7 +24,7 @@ RUN npm run build
 
 # Production runner
 FROM base AS runner
-RUN apk add --no-cache openssl wget zip
+RUN apk add --no-cache openssl wget zip sqlite
 WORKDIR /app
 
 ENV NODE_ENV=production

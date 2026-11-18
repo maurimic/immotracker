@@ -22,11 +22,10 @@ export async function GET() {
         spreadsheetId:
           process.env.GOOGLE_SHEETS_ID ||
           process.env.GOOGLE_SPREADSHEET_ID ||
-          "1GslK8LFx_Day6hjEcQnEY_nmX06KuJwRRdqVr1ph8HU",
+          null,
         sheetName: process.env.GOOGLE_SHEET_NAME || "Kontobewegung",
         serviceAccountEmail:
-          process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ||
-          "immobiliendashboard@n8n-self-host-458810.iam.gserviceaccount.com",
+          process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null,
       },
       { status: 200 }
     );

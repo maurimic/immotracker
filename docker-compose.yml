@@ -21,6 +21,8 @@ services:
       - GOOGLE_SHEET_NAME=${GOOGLE_SHEET_NAME:-Kontobewegung}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - N8N_WEBHOOK_MAURIZIO=${N8N_WEBHOOK_MAURIZIO:-}
+      - N8N_WEBHOOK_STEVEN=${N8N_WEBHOOK_STEVEN:-}
     volumes:
       - immo-data:/data
       - immo-uploads:/app/public/uploads

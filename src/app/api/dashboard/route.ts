@@ -50,7 +50,7 @@ export async function GET() {
     ]);
 
   const payments = await prisma.payment.findMany({
-    where: { period: currentPeriod() },
+    where: { period: currentPeriod(), isSplit: false },
     include: { tenant: true },
   });
 
@@ -265,6 +265,7 @@ export async function GET() {
     where: {
       category: "RENT",
       period: { not: null },
+      isSplit: false,
     },
     _sum: { amount: true },
     orderBy: { period: "desc" },

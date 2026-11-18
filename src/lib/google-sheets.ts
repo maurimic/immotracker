@@ -20,6 +20,20 @@ export interface SheetRow {
 }
 
 /**
+ * Ermittelt die Spreadsheet-ID ausschließlich aus den Umgebungsvariablen.
+ * Wirft einen aussagekräftigen Fehler, falls keine ID hinterlegt ist.
+ */
+export function getSpreadsheetId(): string {
+  const id = process.env.GOOGLE_SHEETS_ID || process.env.GOOGLE_SPREADSHEET_ID;
+  if (!id || !id.trim()) {
+    throw new Error(
+      "Google Sheets Konfiguration fehlt: Keine Spreadsheet-ID konfiguriert. Bitte hinterlegen Sie GOOGLE_SPREADSHEET_ID oder GOOGLE_SHEETS_ID in den Umgebungsvariablen (.env)."
+    );
+  }
+  return id.trim();
+}
+
+/**
  * Holt die Service Account Credentials aus der Umgebung oder Datei
  */
 export function getGoogleCredentials(): { credentials: any; email?: string } {
@@ -37,7 +51,6 @@ export function getGoogleCredentials(): { credentials: any; email?: string } {
   const candidatePaths = [
     process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
     path.join(process.cwd(), "secrets", "google-service-account.json"),
-    "C:\\Users\\User\\Documents\\Codex\\2026-10-22\\goal-baue-ein-komplettes-selbst-gehostetes\\outputs\\hauskonto\\secrets\\google-service-account.json",
   ].filter(Boolean) as string[];
 
   for (const p of candidatePaths) {
@@ -55,7 +68,7 @@ export function getGoogleCredentials(): { credentials: any; email?: string } {
   }
 
   throw new Error(
-    "Google Sheets Konfiguration fehlt: Es wurde kein gültiges Service-Account-JSON gefunden. Bitte hinterlegen Sie die Dienstkonto-Schlüsseldatei oder GOOGLE_SERVICE_ACCOUNT_JSON."
+    "Google Sheets Konfiguration fehlt: Es wurde kein gültiges Service-Account-JSON gefunden. Bitte hinterlegen Sie die Dienstkonto-Schlüsseldatei (GOOGLE_SERVICE_ACCOUNT_KEY_PATH) oder GOOGLE_SERVICE_ACCOUNT_JSON in den Umgebungsvariablen."
   );
 }
 
@@ -114,10 +127,7 @@ function parseDate(val: unknown): Date | null {
  * Liest Kontobewegungen aus dem angegebenen Google Sheet
  */
 export async function fetchSheetTransactions(): Promise<SheetRow[]> {
-  const spreadsheetId =
-    process.env.GOOGLE_SHEETS_ID ||
-    process.env.GOOGLE_SPREADSHEET_ID ||
-    "1GslK8LFx_Day6hjEcQnEY_nmX06KuJwRRdqVr1ph8HU";
+  const spreadsheetId = getSpreadsheetId();
   const sheetName = process.env.GOOGLE_SHEET_NAME || "Kontobewegung";
 
   const { credentials } = getGoogleCredentials();
@@ -220,10 +230,7 @@ export interface AccountBalance {
  * Liest den aktuellsten Kontostand aus dem Tabellenblatt "Kontostand"
  */
 export async function fetchLatestAccountBalance(): Promise<AccountBalance | null> {
-  const spreadsheetId =
-    process.env.GOOGLE_SHEETS_ID ||
-    process.env.GOOGLE_SPREADSHEET_ID ||
-    "1GslK8LFx_Day6hjEcQnEY_nmX06KuJwRRdqVr1ph8HU";
+  const spreadsheetId = getSpreadsheetId();
   const sheetName = process.env.GOOGLE_BALANCE_SHEET_NAME || "Kontostand";
 
   const { credentials } = getGoogleCredentials();
@@ -320,10 +327,7 @@ export async function fetchLatestAccountBalance(): Promise<AccountBalance | null
  * Verbindungstest-Helfer
  */
 export async function testGoogleSheetsConnection() {
-  const spreadsheetId =
-    process.env.GOOGLE_SHEETS_ID ||
-    process.env.GOOGLE_SPREADSHEET_ID ||
-    "1GslK8LFx_Day6hjEcQnEY_nmX06KuJwRRdqVr1ph8HU";
+  const spreadsheetId = getSpreadsheetId();
   const sheetName = process.env.GOOGLE_SHEET_NAME || "Kontobewegung";
   const balanceSheetName = process.env.GOOGLE_BALANCE_SHEET_NAME || "Kontostand";
   const { email } = getGoogleCredentials();

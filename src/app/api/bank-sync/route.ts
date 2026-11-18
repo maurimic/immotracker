@@ -2,25 +2,53 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const WEBHOOKS: Record<string, string> = {
-  maurizio: "https://n8n-maurizio.duckdns.org/webhook/comdirect-Maurizio",
-  steven: "https://n8n-maurizio.duckdns.org/webhook/comdirect-Steven",
-};
+function getWebhookUrl(account: string): string | undefined {
+  if (account === "maurizio") {
+    return (
+      process.env.N8N_WEBHOOK_MAURIZIO ||
+      process.env.BANK_SYNC_WEBHOOK_MAURIZIO ||
+      process.env.N8N_WEBHOOK_URL_MAURIZIO
+    );
+  }
+  if (account === "steven") {
+    return (
+      process.env.N8N_WEBHOOK_STEVEN ||
+      process.env.BANK_SYNC_WEBHOOK_STEVEN ||
+      process.env.N8N_WEBHOOK_URL_STEVEN
+    );
+  }
+  return undefined;
+}
 
 /**
  * Bank-Sync Webhook Proxy
- * Startet den n8n-Comdirect-Workflow im Hintergrund ohne CORS-Probleme
+ * Startet den n8n-Comdirect-Workflow im Hintergrund ohne CORS-Probleme.
+ * Webhook-URLs werden über Umgebungsvariablen (N8N_WEBHOOK_MAURIZIO, N8N_WEBHOOK_STEVEN) konfiguriert.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const account = (body.account || "").toLowerCase().trim();
 
-    const webhookUrl = WEBHOOKS[account];
-    if (!webhookUrl) {
+    if (account !== "maurizio" && account !== "steven") {
       return NextResponse.json(
-        { success: false, error: `Unbekanntes Konto: "${body.account}". Gültig sind: maurizio, steven` },
+        {
+          success: false,
+          error: `Unbekanntes Konto: "${body.account}". Gültig sind: maurizio, steven`,
+        },
         { status: 400 }
+      );
+    }
+
+    const webhookUrl = getWebhookUrl(account);
+    if (!webhookUrl || !webhookUrl.trim()) {
+      const envKey = account === "maurizio" ? "N8N_WEBHOOK_MAURIZIO" : "N8N_WEBHOOK_STEVEN";
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Für das Konto "${account}" ist keine n8n-Webhook-URL in den Umgebungsvariablen konfiguriert. Bitte hinterlegen Sie ${envKey} in der .env-Datei.`,
+        },
+        { status: 500 }
       );
     }
 
@@ -41,7 +69,11 @@ export async function POST(request: Request) {
         response = await fetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trigger: "immotracker", requestedBy: account, timestamp: new Date().toISOString() }),
+          body: JSON.stringify({
+            trigger: "immotracker",
+            requestedBy: account,
+            timestamp: new Date().toISOString(),
+          }),
           signal: controller.signal,
         });
       }

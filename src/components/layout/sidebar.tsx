@@ -39,6 +39,8 @@ const navItems = [
   { href: "/backup", icon: Download, label: "Backup & Export" },
 ];
 
+const SIDEBAR_STORAGE_KEY = "immotracker_sidebar_collapsed";
+
 export function Sidebar() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
@@ -48,7 +50,23 @@ export function Sidebar() {
 
   useEffect(() => {
     setMounted(true);
+    try {
+      const saved = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+      if (saved !== null) {
+        setCollapsed(saved === "true");
+      }
+    } catch {}
   }, []);
+
+  const toggleCollapse = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Mobile-Menü bei Seitenwechsel automatisch schließen
   useEffect(() => {
@@ -246,7 +264,8 @@ export function Sidebar() {
       {/* ── Desktop Sidebar (>= md) ─────────────────────────────────────────── */}
       <aside
         className={cn(
-          "hidden md:flex flex-col h-full border-r border-border bg-card/50 backdrop-blur-sm transition-all duration-300 shrink-0",
+          "hidden md:flex flex-col h-full border-r border-border bg-card/50 backdrop-blur-sm shrink-0",
+          mounted && "transition-all duration-300",
           collapsed ? "w-16" : "w-64"
         )}
       >
@@ -337,11 +356,13 @@ export function Sidebar() {
           </button>
 
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            type="button"
+            onClick={toggleCollapse}
             className={cn(
               "sidebar-item w-full",
               collapsed && "justify-center px-2"
             )}
+            title={collapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"}
           >
             {collapsed ? (
               <ChevronRight className="h-4 w-4 flex-shrink-0" />

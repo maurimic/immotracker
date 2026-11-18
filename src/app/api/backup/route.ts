@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { execSync } from "child_process";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
 function getBackupDir(): string {
   if (process.env.BACKUP_DIR) return process.env.BACKUP_DIR;
@@ -13,24 +14,40 @@ function getBackupDir(): string {
   return localDir;
 }
 
-function getDataPaths(): string[] {
-  const paths: string[] = [];
-  
-  // Docker path
+function getDatabasePath(): string | null {
+  // Docker Pfad
   if (fs.existsSync("/data/immotracker.db")) {
-    paths.push("/data");
-  } else if (fs.existsSync(path.join(process.cwd(), "prisma", "dev.db"))) {
-    paths.push(path.join(process.cwd(), "prisma", "dev.db"));
+    return "/data/immotracker.db";
   }
 
-  // Uploads
+  // Lokaler Pfad (prisma/dev.db)
+  const localPrismaDb = path.join(process.cwd(), "prisma", "dev.db");
+  if (fs.existsSync(localPrismaDb)) {
+    return localPrismaDb;
+  }
+
+  // Fallback über DATABASE_URL
+  if (process.env.DATABASE_URL) {
+    const raw = process.env.DATABASE_URL.replace(/^file:/, "");
+    if (path.isAbsolute(raw) && fs.existsSync(raw)) return raw;
+    const resolvedPrisma = path.resolve(process.cwd(), "prisma", raw);
+    if (fs.existsSync(resolvedPrisma)) return resolvedPrisma;
+    const resolvedCwd = path.resolve(process.cwd(), raw);
+    if (fs.existsSync(resolvedCwd)) return resolvedCwd;
+  }
+
+  return null;
+}
+
+function getUploadsPath(): string | null {
   if (fs.existsSync("/app/public/uploads")) {
-    paths.push("/app/public/uploads");
-  } else if (fs.existsSync(path.join(process.cwd(), "public", "uploads"))) {
-    paths.push(path.join(process.cwd(), "public", "uploads"));
+    return "/app/public/uploads";
   }
-
-  return paths;
+  const localUploads = path.join(process.cwd(), "public", "uploads");
+  if (fs.existsSync(localUploads)) {
+    return localUploads;
+  }
+  return null;
 }
 
 export async function POST() {
@@ -38,18 +55,59 @@ export async function POST() {
   const backupDir = getBackupDir();
   const backupFile = path.join(backupDir, `immotracker-backup-${timestamp}.zip`);
 
-  try {
-    const parts = getDataPaths();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "immotracker-backup-"));
 
-    if (parts.length === 0) {
+  try {
+    const dbPath = getDatabasePath();
+    const uploadsPath = getUploadsPath();
+    const partsToZip: string[] = [];
+
+    if (dbPath && fs.existsSync(dbPath)) {
+      const dbFilename = path.basename(dbPath);
+      const tempDbPath = path.join(tempDir, dbFilename);
+
+      // Konsistente temporäre Kopie via sqlite3 .backup erstellen
+      let consistentSuccess = false;
+      try {
+        const normalizedSrc = dbPath.replace(/\\/g, "/");
+        const normalizedDst = tempDbPath.replace(/\\/g, "/");
+        execSync(`sqlite3 "${normalizedSrc}" ".backup '${normalizedDst}'"`, {
+          stdio: "pipe",
+          timeout: 10000,
+        });
+        if (fs.existsSync(tempDbPath) && fs.statSync(tempDbPath).size > 0) {
+          consistentSuccess = true;
+        }
+      } catch (sqliteErr) {
+        console.warn(
+          "sqlite3 CLI .backup fehlgeschlagen oder nicht verfügbar. Verwende Fallback-Kopie:",
+          sqliteErr
+        );
+      }
+
+      // Fallback falls sqlite3 CLI lokal nicht installiert ist (z. B. Windows-Entwicklung ohne sqlite3.exe)
+      if (!consistentSuccess) {
+        fs.copyFileSync(dbPath, tempDbPath);
+      }
+
+      partsToZip.push(tempDbPath);
+    }
+
+    if (uploadsPath && fs.existsSync(uploadsPath)) {
+      partsToZip.push(uploadsPath);
+    }
+
+    if (partsToZip.length === 0) {
       return NextResponse.json({ error: "Keine Daten zum Sichern gefunden" }, { status: 500 });
     }
 
     if (process.platform === "win32") {
-      const pathsArg = parts.map((p) => `'${p}'`).join(", ");
-      execSync(`powershell -NoProfile -Command "Compress-Archive -Path ${pathsArg} -DestinationPath '${backupFile}' -Force"`);
+      const pathsArg = partsToZip.map((p) => `'${p}'`).join(", ");
+      execSync(
+        `powershell -NoProfile -Command "Compress-Archive -Path ${pathsArg} -DestinationPath '${backupFile}' -Force"`
+      );
     } else {
-      execSync(`zip -r "${backupFile}" ${parts.map((p) => `"${p}"`).join(" ")} 2>&1`);
+      execSync(`zip -r "${backupFile}" ${partsToZip.map((p) => `"${p}"`).join(" ")} 2>&1`);
     }
 
     const stats = fs.statSync(backupFile);
@@ -63,6 +121,14 @@ export async function POST() {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
+  } finally {
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore cleanup errors
+    }
   }
 }
 

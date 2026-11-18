@@ -13,4 +13,5 @@ secrets/
 *.private.json
 meine-rohdaten.json
 scratch/
+export_llm/
 *.tsbuildinfo

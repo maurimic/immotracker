@@ -30,6 +30,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -148,47 +149,109 @@ export default function SteuernPage() {
   const [softwareAndOffice, setSoftwareAndOffice] = useState<number>(180); // Fachliteratur, Immotracker, Büro
   const [customExpenses, setCustomExpenses] = useState<number>(0); // Sonstige Sonderwerbungskosten
 
-  // Feststellungserklärung Beteiligte (Gemeinschaften)
-  const [coOwners, setCoOwners] = useState<CoOwner[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("immotracker_tax_owners");
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          // ignore
-        }
-      }
-    }
-    return DEFAULT_CO_OWNERS;
-  });
+  // Feststellungserklärung Beteiligte (Gemeinschaften) – Synchronisation über SQLite app_settings
+  const [coOwners, setCoOwners] = useState<CoOwner[]>(DEFAULT_CO_OWNERS);
+  const [coOwnersLoaded, setCoOwnersLoaded] = useState<boolean>(false);
+  const [savingCoOwners, setSavingCoOwners] = useState<boolean>(false);
+  const [coOwnersSavedAt, setCoOwnersSavedAt] = useState<Date | null>(null);
 
-  // Save coOwners to localStorage
+  // Debounced Auto-Save in SQLite app_settings Tabelle
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("immotracker_tax_owners", JSON.stringify(coOwners));
-    }
-  }, [coOwners]);
+    if (!coOwnersLoaded) return; // Nicht während der Ladephase ausführen
+
+    setSavingCoOwners(true);
+    const timer = setTimeout(async () => {
+      try {
+        const val = JSON.stringify(coOwners);
+        const res = await fetch("/api/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            key: "immotracker_tax_owners",
+            value: val,
+          }),
+        });
+
+        if (res.ok) {
+          setCoOwnersSavedAt(new Date());
+          if (typeof window !== "undefined") {
+            localStorage.setItem("immotracker_tax_owners", val);
+          }
+        }
+      } catch (err) {
+        console.error("Fehler beim Speichern der Miteigentümer in app_settings:", err);
+      } finally {
+        setSavingCoOwners(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [coOwners, coOwnersLoaded]);
 
   // Daten laden
   const loadData = async () => {
     try {
-      const [propsRes, loansRes, ticketsRes, billsRes] = await Promise.all([
+      const [propsRes, loansRes, ticketsRes, billsRes, settingsRes] = await Promise.all([
         fetch("/api/properties"),
         fetch("/api/loans"),
         fetch("/api/tickets"),
         fetch("/api/utility-bills"),
+        fetch("/api/settings?key=immotracker_tax_owners"),
       ]);
 
       if (propsRes.ok) setProperties(await propsRes.json());
       if (loansRes.ok) setLoans(await loansRes.json());
       if (ticketsRes.ok) setTickets(await ticketsRes.json());
       if (billsRes.ok) setUtilityBills(await billsRes.json());
+
+      // Miteigentümer aus app_settings (SQLite) laden
+      if (settingsRes.ok) {
+        const data = await settingsRes.json();
+        if (data.value) {
+          try {
+            const parsed = JSON.parse(data.value);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCoOwners(parsed);
+              setCoOwnersSavedAt(new Date());
+              if (typeof window !== "undefined") {
+                localStorage.setItem("immotracker_tax_owners", data.value);
+              }
+            }
+          } catch {
+            // ignore JSON parse error
+          }
+        } else {
+          // Migration: Falls noch nicht in der Datenbank vorhanden, bestehende Daten aus localStorage migrieren
+          if (typeof window !== "undefined") {
+            const localSaved = localStorage.getItem("immotracker_tax_owners");
+            if (localSaved) {
+              try {
+                const parsed = JSON.parse(localSaved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  setCoOwners(parsed);
+                  await fetch("/api/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      key: "immotracker_tax_owners",
+                      value: localSaved,
+                    }),
+                  });
+                  setCoOwnersSavedAt(new Date());
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      }
     } catch (e) {
       console.error("Fehler beim Laden der Steuerdaten", e);
       toast({ title: "Fehler beim Laden der Daten", variant: "destructive" });
     } finally {
       setLoading(false);
+      setCoOwnersLoaded(true);
     }
   };
 
@@ -1339,9 +1402,22 @@ III. § 35a Abs. 3 EStG (Handwerkerleistungen):
 
               {/* Miteigentümer-Konfiguration */}
               <div className="space-y-3">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Beteiligte & Quoten festlegen
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Beteiligte & Quoten festlegen
+                  </h4>
+                  <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    {savingCoOwners ? (
+                      <span className="text-amber-500 flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3 animate-spin" /> Speichert in DB...
+                      </span>
+                    ) : coOwnersSavedAt ? (
+                      <span className="text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Synchronisiert (SQLite)
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 gap-3">
                   {coOwners.map((owner, idx) => (
                     <div
