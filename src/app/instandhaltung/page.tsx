@@ -104,18 +104,42 @@ function AddTicketDialog({ properties, onRefresh }: { properties: Property[]; on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.propertyId) {
+      toast({
+        title: "Wohnung fehlt",
+        description: "Bitte wählen Sie eine Wohnung aus.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
-    const res = await fetch("/api/tickets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    if (res.ok) {
-      toast({ title: "Reparatur-Ticket erstellt" });
-      setOpen(false);
-      setForm({ propertyId: "", title: "", description: "", priority: "MEDIUM", cost: "", craftsman: "" });
-      onRefresh();
+    try {
+      const res = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        toast({ title: "Reparatur-Ticket erstellt" });
+        setOpen(false);
+        setForm({ propertyId: "", title: "", description: "", priority: "MEDIUM", cost: "", craftsman: "" });
+        onRefresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        toast({
+          title: "Fehler beim Erstellen",
+          description: data?.error || "Konnte Reparatur-Ticket nicht anlegen.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Netzwerkfehler",
+        description: err?.message || "Verbindung zum Server fehlgeschlagen.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -299,18 +323,42 @@ function AddMeterDialog({ properties, onRefresh }: { properties: Property[]; onR
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.propertyId) {
+      toast({
+        title: "Wohnung fehlt",
+        description: "Bitte wählen Sie eine Wohnung aus.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
-    const res = await fetch("/api/meters", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    if (res.ok) {
-      toast({ title: "Zählerstand erfasst" });
-      setOpen(false);
-      setForm({ propertyId: "", type: "ELECTRICITY", value: "", unit: "kWh", readingDate: new Date().toISOString().slice(0, 10), notes: "" });
-      onRefresh();
+    try {
+      const res = await fetch("/api/meters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        toast({ title: "Zählerstand erfasst" });
+        setOpen(false);
+        setForm({ propertyId: "", type: "ELECTRICITY", value: "", unit: "kWh", readingDate: new Date().toISOString().slice(0, 10), notes: "" });
+        onRefresh();
+      } else {
+        const data = await res.json().catch(() => null);
+        toast({
+          title: "Fehler beim Erfassen",
+          description: data?.error || "Zählerstand konnte nicht gespeichert werden.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Netzwerkfehler",
+        description: err?.message || "Fehler beim Senden der Daten.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -397,8 +445,10 @@ export default function InstandhaltungPage() {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
   const moveTicket = async (ticketId: string, newStatus: string) => {
+    const existing = tickets.find((t) => t.id === ticketId);
+    if (existing && existing.status === newStatus) return;
     try {
-      const doneAt = newStatus === "DONE" ? new Date().toISOString() : null;
+      const doneAt = newStatus === "DONE" ? (existing?.doneAt || new Date().toISOString()) : null;
       const res = await fetch(`/api/tickets/${ticketId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -450,7 +500,7 @@ export default function InstandhaltungPage() {
   };
 
   const totalCosts = tickets
-    .filter((t) => t.status === "DONE" && t.cost)
+    .filter((t) => t.status === "DONE" && t.cost != null && t.cost > 0)
     .reduce((s, t) => s + (t.cost || 0), 0);
 
   const doneCount = tickets.filter((t) => t.status === "DONE").length;
@@ -548,6 +598,8 @@ export default function InstandhaltungPage() {
                     setDragOverCol(null);
                     const ticketId = e.dataTransfer.getData("text/plain");
                     if (ticketId) {
+                      const ticket = tickets.find((t) => t.id === ticketId);
+                      if (ticket && ticket.status === col.key) return;
                       moveTicket(ticketId, col.key);
                     }
                   }}
@@ -614,7 +666,7 @@ export default function InstandhaltungPage() {
                           )}
 
                           <div className="flex items-center gap-2 flex-wrap text-xs">
-                            {ticket.cost && (
+                            {ticket.cost != null && ticket.cost > 0 && (
                               <span className="font-medium text-foreground bg-secondary/60 px-2 py-0.5 rounded">
                                 💶 {formatCurrency(ticket.cost)}
                               </span>
@@ -734,7 +786,7 @@ export default function InstandhaltungPage() {
                     const monthlyTarget = prop.sqm * 1.20;
                     const annualTarget = monthlyTarget * 12;
                     // Seed initial virtual reserve ~ 3 years of reserves
-                    const propTickets = tickets.filter((t) => t.propertyId === prop.id && t.cost);
+                    const propTickets = tickets.filter((t) => t.propertyId === prop.id && t.cost != null && t.cost > 0);
                     const spent = propTickets.reduce((s, t) => s + (t.cost || 0), 0);
                     const initialStock = annualTarget * 2.8;
                     const currentBalance = Math.max(0, initialStock - spent);

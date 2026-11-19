@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import path from "path";
 import fs from "fs";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
   try {
@@ -31,7 +32,36 @@ export async function POST(request: Request) {
     // Create automatic safety backup of current db before overwriting
     if (fs.existsSync(targetDbPath)) {
       const backupPath = `${targetDbPath}.safety_${Date.now()}.bak`;
-      fs.copyFileSync(targetDbPath, backupPath);
+      try {
+        fs.copyFileSync(targetDbPath, backupPath);
+      } catch (copyErr) {
+        console.warn("Safety backup konnte nicht erstellt werden:", copyErr);
+      }
+    }
+
+    // Prisma-Verbindung trennen, um alle Locks und Handles freizugeben
+    try {
+      await prisma.$disconnect();
+    } catch (discErr) {
+      console.warn("prisma.$disconnect() vor Restore:", discErr);
+    }
+
+    // Eventuell vorhandene .db-wal und .db-shm Dateien entfernen
+    const walFiles = [
+      `${targetDbPath}-wal`,
+      `${targetDbPath}-shm`,
+      targetDbPath.endsWith(".db") ? targetDbPath.replace(/\.db$/, ".db-wal") : null,
+      targetDbPath.endsWith(".db") ? targetDbPath.replace(/\.db$/, ".db-shm") : null,
+    ].filter(Boolean) as string[];
+
+    for (const walFile of Array.from(new Set(walFiles))) {
+      if (fs.existsSync(walFile)) {
+        try {
+          fs.unlinkSync(walFile);
+        } catch (unlinkErr) {
+          console.warn(`Konnte WAL/SHM-Datei nicht entfernen (${walFile}):`, unlinkErr);
+        }
+      }
     }
 
     // Write new DB

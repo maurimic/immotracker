@@ -203,42 +203,63 @@ export default function InteractivePropertyMap({
             if (inner) inner.style.transform = "scale(1)";
           });
 
+          // Theme-spezifische Kontrastfarben für das Popup
+          const titleColor = isDark ? "#f8fafc" : "#0f172a";
+          const subtitleColor = isDark ? "#94a3b8" : "#64748b";
+          const unitCardBg = isDark ? "rgba(30, 41, 59, 0.75)" : "rgba(241, 245, 249, 0.9)";
+          const unitCardBorder = isDark ? "rgba(51, 65, 85, 0.8)" : "rgba(203, 213, 225, 0.9)";
+          const unitNameColor = isDark ? "#f8fafc" : "#0f172a";
+          const unitBadgeBg = isDark ? "rgba(30, 58, 138, 0.55)" : "rgba(219, 234, 254, 0.95)";
+          const unitBadgeColor = isDark ? "#93c5fd" : "#1d4ed8";
+          const unitBadgeBorder = isDark ? "rgba(147, 197, 253, 0.4)" : "rgba(37, 99, 235, 0.3)";
+          const metaColor = isDark ? "#94a3b8" : "#64748b";
+          const tenantColor = isDark ? "#e2e8f0" : "#1e293b";
+          const labelColor = isDark ? "#94a3b8" : "#64748b";
+          const coldRentColor = isDark ? "#34d399" : "#059669"; // Kaltmiete: Smaragdgrün im Dark Mode (#34d399) für perfekten Kontrast
+          const warmRentColor = isDark ? "#60a5fa" : "#2563eb"; // Warmmiete: Leuchtendes Blau
+
           // Popup HTML generieren
           const unitsHtml = cluster.properties
             .map((p) => {
               const tenant = p.tenant ? `${p.tenant.firstName} ${p.tenant.lastName}` : "Leerstand";
-              const warmRent = (p.tenant?.coldRent || 0) + (p.tenant?.utilities || 0);
+              const coldRent = p.tenant?.coldRent || 0;
+              const warmRent = coldRent + (p.tenant?.utilities || 0);
               const unitBadge = p.unitNumber || p.floor || "WE";
 
               return `
                 <div style="
-                  padding: 8px 10px;
-                  border: 1px solid rgba(148, 163, 184, 0.25);
-                  border-radius: 6px;
-                  background: rgba(148, 163, 184, 0.08);
-                  margin-bottom: 6px;
+                  padding: 9px 11px;
+                  border: 1px solid ${unitCardBorder};
+                  border-radius: 8px;
+                  background: ${unitCardBg};
+                  margin-bottom: 7px;
                   font-size: 12px;
                 ">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <strong style="font-size: 12px; font-weight: 600;">${p.name}</strong>
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; gap: 6px;">
+                    <strong style="font-size: 12px; font-weight: 700; color: ${unitNameColor}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}</strong>
                     <span style="
-                      background: rgba(148, 163, 184, 0.2);
-                      padding: 1px 6px;
+                      background: ${unitBadgeBg};
+                      color: ${unitBadgeColor};
+                      border: 1px solid ${unitBadgeBorder};
+                      padding: 1px 7px;
                       border-radius: 4px;
-                      font-size: 10px;
+                      font-size: 11px;
+                      font-weight: 600;
                       font-family: monospace;
+                      white-space: nowrap;
+                      flex-shrink: 0;
                     ">${unitBadge}</span>
                   </div>
-                  <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">
-                    👤 Mieter: <strong style="color: inherit;">${tenant}</strong> · 📐 ${p.sqm} m²
+                  <div style="color: ${metaColor}; font-size: 11px; margin-bottom: 6px;">
+                    👤 Mieter: <strong style="color: ${tenantColor}; font-weight: 600;">${tenant}</strong> · 📐 <span style="color: ${tenantColor}; font-weight: 500;">${p.sqm} m²</span>
                   </div>
-                  <div style="display: flex; justify-content: space-between; font-size: 11px; border-top: 1px dashed rgba(148, 163, 184, 0.2); padding-top: 4px;">
-                    <span style="color: #64748b;">Kaltmiete:</span>
-                    <strong style="font-family: monospace;">${formatCurrency(p.tenant?.coldRent || 0)}</strong>
+                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; border-top: 1px dashed ${unitCardBorder}; padding-top: 5px;">
+                    <span style="color: ${labelColor}; font-weight: 500;">Kaltmiete:</span>
+                    <strong style="font-family: monospace; font-size: 12px; font-weight: 700; color: ${coldRentColor};">${formatCurrency(coldRent)}</strong>
                   </div>
-                  <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px;">
-                    <span style="color: #64748b;">Warmmiete:</span>
-                    <strong style="font-family: monospace; color: #2563eb;">${formatCurrency(warmRent)}</strong>
+                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-top: 3px;">
+                    <span style="color: ${labelColor}; font-weight: 500;">Warmmiete:</span>
+                    <strong style="font-family: monospace; font-size: 12px; font-weight: 700; color: ${warmRentColor};">${formatCurrency(warmRent)}</strong>
                   </div>
                 </div>
               `;
@@ -246,12 +267,21 @@ export default function InteractivePropertyMap({
             .join("");
 
           const popupContent = `
-            <div style="font-family: inherit; min-width: 260px; max-width: 310px; padding: 4px;">
-              <div style="font-size: 13px; font-weight: 700; margin-bottom: 2px; color: #1e293b;">📍 ${cluster.address}</div>
-              <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">
-                Stadt: ${cluster.city} · ${unitCount} ${unitCount > 1 ? "Wohneinheiten" : "Wohneinheit"}
+            <div style="font-family: inherit; min-width: 270px; max-width: 320px; padding: 2px;">
+              <div style="font-size: 13px; font-weight: 700; margin-bottom: 3px; color: ${titleColor};">📍 ${cluster.address}</div>
+              <div style="font-size: 11px; color: ${subtitleColor}; margin-bottom: 9px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                <span>Stadt: <strong style="color: ${titleColor};">${cluster.city}</strong></span>
+                <span>·</span>
+                <span style="
+                  background: ${isDark ? 'rgba(51, 65, 85, 0.6)' : 'rgba(226, 232, 240, 0.8)'};
+                  color: ${titleColor};
+                  padding: 1px 6px;
+                  border-radius: 4px;
+                  font-weight: 600;
+                  font-size: 10px;
+                ">${unitCount} ${unitCount > 1 ? "Wohneinheiten" : "Wohneinheit"}</span>
               </div>
-              <div style="max-height: 260px; overflow-y: auto; padding-right: 2px;">
+              <div style="max-height: 270px; overflow-y: auto; padding-right: 2px;">
                 ${unitsHtml}
               </div>
             </div>
@@ -304,7 +334,7 @@ export default function InteractivePropertyMap({
         markersRef.current = [];
       }
     };
-  }, [activeStyleUrl]);
+  }, [activeStyleUrl, isDark, properties]);
 
   // Vollbild resize handling
   useEffect(() => {
@@ -507,10 +537,10 @@ export default function InteractivePropertyMap({
                     </div>
 
                     <div className="text-right shrink-0">
-                      <span className="font-bold font-mono text-sm text-foreground">
+                      <span className="font-bold font-mono text-sm text-emerald-600 dark:text-emerald-400">
                         {formatCurrency(clusterColdRent)}
                       </span>
-                      <span className="block text-[10px] text-muted-foreground">Kalt / Mon.</span>
+                      <span className="block text-[10px] text-muted-foreground font-medium">Kalt / Mon.</span>
                     </div>
                   </div>
 
@@ -518,22 +548,38 @@ export default function InteractivePropertyMap({
                   <div className="space-y-1.5 pt-1 border-t border-border/50">
                     {cluster.properties.map((p) => {
                       const warm = (p.tenant?.coldRent || 0) + (p.tenant?.utilities || 0);
+                      const cold = p.tenant?.coldRent || 0;
                       const tName = p.tenant ? `${p.tenant.firstName} ${p.tenant.lastName}` : "Leerstand";
+                      const unitBadge = p.unitNumber || p.floor;
 
                       return (
                         <div
                           key={p.id}
-                          className="flex items-center justify-between text-xs bg-background/60 p-1.5 rounded border border-border/40"
+                          className="flex items-center justify-between text-xs bg-background/70 p-2 rounded-md border border-border/50 hover:bg-muted/40 transition-colors"
                         >
                           <div className="min-w-0 pr-2">
-                            <span className="font-semibold truncate block">{p.name}</span>
-                            <span className="text-[11px] text-muted-foreground truncate block">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-foreground truncate">{p.name}</span>
+                              {unitBadge && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                  {unitBadge}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-muted-foreground truncate block mt-0.5">
                               {tName} · {p.sqm} m²
                             </span>
                           </div>
 
                           <div className="text-right shrink-0 flex items-center gap-1.5">
-                            <span className="font-mono font-medium">{formatCurrency(warm)}</span>
+                            <div>
+                              <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 block text-xs">
+                                {formatCurrency(cold)} <span className="text-[10px] text-muted-foreground font-normal">Kalt</span>
+                              </span>
+                              <span className="font-mono text-[11px] text-muted-foreground block">
+                                {formatCurrency(warm)} <span className="text-[9px]">Warm</span>
+                              </span>
+                            </div>
                             {onSelectProperty && (
                               <Button
                                 size="sm"

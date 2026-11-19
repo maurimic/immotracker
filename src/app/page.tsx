@@ -26,6 +26,8 @@ import {
   CreditCard,
   ArrowRight,
   MapPin,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import {
   Tooltip,
@@ -165,15 +167,24 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
+      setError(null);
       const res = await fetch(`/api/dashboard?t=${Date.now()}`, {
         cache: "no-store",
         headers: { "Cache-Control": "no-cache" },
       });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || `Fehler beim Laden des Dashboards (HTTP ${res.status})`);
+      }
       const json = await res.json();
       setData(json);
+    } catch (err: any) {
+      console.error("Dashboard fetch error:", err);
+      setError(err?.message || "Fehler beim Laden der Dashboard-Daten");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -186,14 +197,6 @@ export default function DashboardPage() {
 
   const [warningsOpen, setWarningsOpen] = useState(false);
 
-  const totalWarnings =
-    (data?.redFixedRates.length ?? 0) +
-    (data?.overduePayments.length ?? 0) +
-    (data?.fifteenPercentWarnings?.length ?? 0) +
-    (data?.openTickets.filter((t) => t.priority === "HIGH").length ?? 0);
-
-  const highTickets = data?.openTickets.filter((t) => t.priority === "HIGH") ?? [];
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -205,7 +208,39 @@ export default function DashboardPage() {
     );
   }
 
+  if (error && !data) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <Card className="max-w-md w-full border-destructive/40 bg-card shadow-lg">
+          <CardHeader className="text-center pb-3">
+            <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center text-destructive mb-2">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            <CardTitle className="text-lg">Dashboard konnte nicht geladen werden</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground mt-1">
+              {error}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2 flex justify-center">
+            <Button onClick={refresh} variant="outline" size="sm" className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              Erneut versuchen
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!data) return null;
+
+  const totalWarnings =
+    (data.redFixedRates?.length ?? 0) +
+    (data.overduePayments?.length ?? 0) +
+    (data.fifteenPercentWarnings?.length ?? 0) +
+    (data.openTickets?.filter((t) => t.priority === "HIGH").length ?? 0);
+
+  const highTickets = data.openTickets?.filter((t) => t.priority === "HIGH") ?? [];
 
   // Vermögensbilanz & Schulden-Kennzahlen (Kaufpreis + aktivierte/wertsteigernde Investitionen)
   const totalPropertyVal = (data.totalPurchasePrice || 0) + (data.totalRenovations || 0);
@@ -521,7 +556,7 @@ export default function DashboardPage() {
                       )}
                     </>
                   ) : (
-                    "Wird geladen..."
+                    "Kein Kontostand erfasst"
                   )}
                 </p>
               </div>

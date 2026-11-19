@@ -8,10 +8,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+function sanitizeRedirectUrl(url: string | null): string {
+  if (!url) return "/";
+  const trimmed = url.trim();
+  // Muss strikt mit "/" beginnen und darf nicht mit "//" oder "/\" beginnen (Open Redirect / XSS Schutz)
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//") && !trimmed.startsWith("/\\")) {
+    return trimmed;
+  }
+  return "/";
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const from = searchParams.get("from") || "/";
+  const from = sanitizeRedirectUrl(searchParams.get("from"));
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

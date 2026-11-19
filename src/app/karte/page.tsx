@@ -114,11 +114,15 @@ export default function KartePage() {
             <div className="pt-2 border-t border-border/50 text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Einheiten:</span>
-                <span className="font-medium">EG (WE1) & 2.OG (WE5 + WE6)</span>
+                <span className="font-semibold text-foreground">EG (WE1) & 2.OG (WE5 + WE6)</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Wohnfläche:</span>
-                <span className="font-mono font-medium">138,00 m²</span>
+                <span className="font-mono font-medium text-foreground">138,00 m²</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Kaltmiete gesamt:</span>
+                <strong className="font-mono text-emerald-600 dark:text-emerald-400">1.081,00 €</strong>
               </div>
               <div className="flex justify-between text-blue-600 dark:text-blue-400">
                 <span className="font-medium">Warmmiete gesamt:</span>
@@ -146,11 +150,15 @@ export default function KartePage() {
             <div className="pt-2 border-t border-border/50 text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Einheiten:</span>
-                <span className="font-medium">Whg. 1 (EG)</span>
+                <span className="font-semibold text-foreground">Whg. 1 (EG)</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Wohnfläche:</span>
-                <span className="font-mono font-medium">50,00 m²</span>
+                <span className="font-mono font-medium text-foreground">50,00 m²</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Kaltmiete gesamt:</span>
+                <strong className="font-mono text-emerald-600 dark:text-emerald-400">290,00 €</strong>
               </div>
               <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                 <span className="font-medium">Warmmiete gesamt:</span>
@@ -178,11 +186,15 @@ export default function KartePage() {
             <div className="pt-2 border-t border-border/50 text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Einheiten:</span>
-                <span className="font-medium">WE6 (DG)</span>
+                <span className="font-semibold text-foreground">WE6 (DG)</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Wohnfläche:</span>
-                <span className="font-mono font-medium">45,14 m²</span>
+                <span className="font-mono font-medium text-foreground">45,14 m²</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Kaltmiete gesamt:</span>
+                <strong className="font-mono text-emerald-600 dark:text-emerald-400">350,00 €</strong>
               </div>
               <div className="flex justify-between text-purple-600 dark:text-purple-400">
                 <span className="font-medium">Warmmiete gesamt:</span>
