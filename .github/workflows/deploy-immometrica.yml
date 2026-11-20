@@ -7,49 +7,40 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Inspect and Configure Reverse Proxy
+      - name: Configure Caddy Reverse Proxy
         run: |
-          echo "=== 1. Checking Listening Ports on Host ==="
-          ss -tlpn || netstat -tlpn || true
-          
-          echo "=== 2. Checking Active Reverse Proxy Processes ==="
-          ps aux | grep -E "nginx|caddy|apache|traefik" | grep -v grep || true
-          
-          echo "=== 3. Checking Nginx configs ==="
-          if [ -d /etc/nginx ]; then
-            echo "--- /etc/nginx/sites-enabled/ ---"
-            ls -la /etc/nginx/sites-enabled/ || true
-            for f in /etc/nginx/sites-enabled/*; do
-              if [ -f "$f" ]; then
-                echo "FILE: $f"
-                cat "$f"
-                echo "--------------------"
-              fi
-            done
-          fi
-          
-          echo "=== 4. Checking Caddy configs ==="
-          if [ -f /etc/caddy/Caddyfile ]; then
-            cat /etc/caddy/Caddyfile
-          fi
-          
-          echo "=== 5. Checking Firewall status ==="
-          which ufw && ufw status || true
-          which iptables && iptables -L INPUT -n --line-numbers | head -n 30 || true
+          echo "=== Configuring Caddy for immofinder-poggel-micciche.duckdns.org ==="
+          if ! grep -q "immofinder-poggel-micciche.duckdns.org" /etc/caddy/Caddyfile; then
+            echo "Appending block to /etc/caddy/Caddyfile..."
+            if sudo -n true 2>/dev/null; then
+              sudo tee -a /etc/caddy/Caddyfile << 'EOF'
 
-      - name: Deploy ImmoMetrica to Server
-        run: |
-          echo "========================================================"
-          echo " Starting ImmoMetrica Deployment on $(hostname)"
-          echo "========================================================"
-          TARGET_DIR="/opt/immometrica"
-          if [ ! -d "$TARGET_DIR" ] && [ -d "$HOME/immometrica" ]; then
-            TARGET_DIR="$HOME/immometrica"
+immofinder-poggel-micciche.duckdns.org {
+    reverse_proxy 127.0.0.1:8000
+}
+EOF
+              echo "Reloading Caddy with sudo..."
+              sudo systemctl reload caddy || sudo caddy reload --config /etc/caddy/Caddyfile
+            elif [ -w /etc/caddy/Caddyfile ]; then
+              cat << 'EOF' >> /etc/caddy/Caddyfile
+
+immofinder-poggel-micciche.duckdns.org {
+    reverse_proxy 127.0.0.1:8000
+}
+EOF
+              echo "Reloading Caddy directly..."
+              caddy reload --config /etc/caddy/Caddyfile || systemctl reload caddy
+            else
+              echo "Cannot write to /etc/caddy/Caddyfile without sudo. Permissions:"
+              ls -la /etc/caddy/Caddyfile
+            fi
+          else
+            echo "immofinder-poggel-micciche.duckdns.org already in Caddyfile."
           fi
-          cd "$TARGET_DIR"
-          git fetch origin main
-          git reset --hard origin/main
-          docker compose up -d --build --remove-orphans
-          sleep 5
-          docker compose ps
-          curl -s -i http://localhost:8000/api/health
+          
+          echo "=== Updated Caddyfile Contents ==="
+          cat /etc/caddy/Caddyfile
+          
+          echo "=== Testing Local Caddy Routing ==="
+          sleep 3
+          curl -s -i -H "Host: immofinder-poggel-micciche.duckdns.org" http://localhost:80/api/health || true
