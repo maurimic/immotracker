@@ -7,73 +7,49 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
+      - name: Inspect and Configure Reverse Proxy
+        run: |
+          echo "=== 1. Checking Listening Ports on Host ==="
+          ss -tlpn || netstat -tlpn || true
+          
+          echo "=== 2. Checking Active Reverse Proxy Processes ==="
+          ps aux | grep -E "nginx|caddy|apache|traefik" | grep -v grep || true
+          
+          echo "=== 3. Checking Nginx configs ==="
+          if [ -d /etc/nginx ]; then
+            echo "--- /etc/nginx/sites-enabled/ ---"
+            ls -la /etc/nginx/sites-enabled/ || true
+            for f in /etc/nginx/sites-enabled/*; do
+              if [ -f "$f" ]; then
+                echo "FILE: $f"
+                cat "$f"
+                echo "--------------------"
+              fi
+            done
+          fi
+          
+          echo "=== 4. Checking Caddy configs ==="
+          if [ -f /etc/caddy/Caddyfile ]; then
+            cat /etc/caddy/Caddyfile
+          fi
+          
+          echo "=== 5. Checking Firewall status ==="
+          which ufw && ufw status || true
+          which iptables && iptables -L INPUT -n --line-numbers | head -n 30 || true
+
       - name: Deploy ImmoMetrica to Server
         run: |
           echo "========================================================"
           echo " Starting ImmoMetrica Deployment on $(hostname)"
-          echo " Working directory: $(pwd), User: $(whoami)"
           echo "========================================================"
-          
-          # Target deployment directory
-          TARGET_DIR="$HOME/immometrica"
-          if [ -d "/opt/immotracker" ] && [ ! -d "$HOME/immotracker" ]; then
-            TARGET_DIR="/opt/immometrica"
+          TARGET_DIR="/opt/immometrica"
+          if [ ! -d "$TARGET_DIR" ] && [ -d "$HOME/immometrica" ]; then
+            TARGET_DIR="$HOME/immometrica"
           fi
-          
-          echo "Target directory: $TARGET_DIR"
-          
-          if [ -d "$TARGET_DIR/.git" ]; then
-            echo "Repository exists. Pulling latest main..."
-            cd "$TARGET_DIR"
-            git fetch origin main
-            git reset --hard origin/main
-          else
-            echo "Cloning https://github.com/maurimic/immometrica.git into $TARGET_DIR..."
-            git clone https://github.com/maurimic/immometrica.git "$TARGET_DIR"
-            cd "$TARGET_DIR"
-          fi
-          
-          # Configure .env
-          if [ ! -f .env ]; then
-            echo "Creating .env from .env.example..."
-            cp .env.example .env
-          fi
-          
-          # Sync credentials from Immotracker if available
-          IMMOTRACKER_ENV=""
-          if [ -f "$HOME/immotracker/.env" ]; then
-            IMMOTRACKER_ENV="$HOME/immotracker/.env"
-          elif [ -f "/opt/immotracker/.env" ]; then
-            IMMOTRACKER_ENV="/opt/immotracker/.env"
-          fi
-          
-          if [ -n "$IMMOTRACKER_ENV" ]; then
-            echo "Syncing auth credentials from $IMMOTRACKER_ENV..."
-            IMMO_USER=$(grep -E "^(APP_USERNAME|ADMIN_USERNAME)=" "$IMMOTRACKER_ENV" | head -n 1 | cut -d '=' -f2- | tr -d '\r"')
-            IMMO_PASS=$(grep -E "^(APP_PASSWORD|ADMIN_PASSWORD)=" "$IMMOTRACKER_ENV" | head -n 1 | cut -d '=' -f2- | tr -d '\r"')
-            if [ -n "$IMMO_USER" ]; then
-              sed -i "s/^APP_USERNAME=.*/APP_USERNAME=$IMMO_USER/" .env
-            fi
-            if [ -n "$IMMO_PASS" ]; then
-              sed -i "s/^APP_PASSWORD=.*/APP_PASSWORD=$IMMO_PASS/" .env
-            fi
-          fi
-          
-          echo "Building Docker container..."
-          docker compose build
-          
-          echo "Starting ImmoMetrica container..."
-          docker compose up -d --remove-orphans
-          
-          echo "Waiting 6 seconds for container startup..."
-          sleep 6
-          
-          echo "--- Docker Containers Status ---"
+          cd "$TARGET_DIR"
+          git fetch origin main
+          git reset --hard origin/main
+          docker compose up -d --build --remove-orphans
+          sleep 5
           docker compose ps
-          
-          echo "--- Verifying Health Check Endpoint ---"
-          curl -s -i http://localhost:8000/api/health || echo "Health check curl returned non-zero"
-          
-          echo "========================================================"
-          echo " ImmoMetrica successfully deployed and active! "
-          echo "========================================================"
+          curl -s -i http://localhost:8000/api/health
